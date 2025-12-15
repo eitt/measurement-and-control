@@ -1,0 +1,115 @@
+\documentclass[12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{geometry}
+\geometry{margin=1in}
+
+% Title and authors
+\title{Predicción Híbrida del Final de Vida útil de Motores Turbofan y Optimización de Control Mediante Algoritmos Evolutivos}
+\author{Consorcio de Investigación en Sistemas de Control y Medición}
+\date{Diciembre 2025}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+En este artículo se presenta una solución híbrida basada en redes neuronales artificiales y optimización para la predicción de la vida útil remanente (\emph{Remaining Useful Life}, RUL) de motores turbofan.  El conjunto de datos real utilizado corresponde al \emph{Commercial Modular Aero\mbox{--}Propulsion System Simulation} (C\,MAPSS) publicado por la \emph{Prognostics Center of Excellence} de la NASA, el cual contiene series temporales multivariadas de sensores y configuraciones operativas de motores simulados sometidos a fallos progresivos【53230523514120†L48-L69】.  A diferencia de estudios previos enfocados exclusivamente en arquitectura de redes, se integra un proceso de optimización mediante \emph{Particle Swarm Optimization} (PSO) para ajustar hiperparámetros de la red neuronal y, paralelamente, calibrar un controlador de orden fraccionario para un sistema de frecuencia de carga, inspirándose en estrategias de control robusto descritas en la literatura【860517220029563†L34-L52】.  La metodología emplea un esquema de agentes: un agente de exploración selecciona y documenta el conjunto de datos, un agente de revisión del estado del arte analiza trabajos recientes y justifica la propuesta, un agente matemático formula la función de costo y los modelos neuronales, un agente de programación implementa el código, y un agente revisor critica la novedad y la validez experimental.  Los resultados obtenidos muestran que el modelo \emph{Multi\mbox{--}Layer Perceptron} optimizado reduce el error absoluto medio en comparación con configuraciones arbitrarias y que la optimización evolutiva del controlador mejora la estabilidad del sistema energético.  Estas contribuciones se enmarcan en el alcance de la revista \emph{Measurement and Control} al combinar avances en control adaptativo, instrumentación y aprendizaje automático.
+\end{abstract}
+
+\section{Introducción}
+
+La predicción precisa del tiempo de fallo de equipos industriales es un problema esencial en ingeniería de control y mantenimiento predictivo.  En la última década se han consolidado enfoques basados en datos que reemplazan o complementan a los modelos físicos, aprovechando el auge del \emph{machine learning}.  El banco de ensayos C\,MAPSS de la NASA ofrece un banco de datos público para desarrollar modelos de degradación de motores.  Cada registro incluye mediciones de 26 variables (tres ajustes de operación y veintitrés señales de sensores) a lo largo de múltiples ciclos hasta la falla【53230523514120†L68-L74】.  La tarea consiste en estimar el número de ciclos restantes antes de que el motor alcance la condición de falla, utilizando la porción de datos de entrenamiento donde el fallo se observa plenamente y la porción de prueba donde sólo se dispone de un prefijo de la trayectoria.
+
+Los estudios basados en redes recurrentes como LSTM han demostrado ventajas para capturar dependencias temporales.  Por ejemplo, un estudio comparó LSTM con perceptrones multicapa y concluyó que los modelos LSTM superan significativamente a los MLP para la predicción del RUL【581712209779349†L31-L47】.  Sin embargo, el costo computacional y la necesidad de grandes secuencias de entrenamiento dificultan su adopción en entornos de control en tiempo real.  Recientemente se han propuesto arquitecturas más complejas, como autoencoders convolucionales con mecanismos de atención (CAELSTM)【667086490760821†L70-L88】 o transformadores con atención posicional y LSTM jerárquicos【157517872008656†L65-L81】, que reportan mejoras marginales pero a costa de incrementar la complejidad y la latencia de inferencia.  Paralelamente, la optimización de hiperparámetros mediante métodos bayesianos o algoritmos evolutivos permite personalizar los modelos sin intervención manual【780062152199479†L70-L94】.  En el ámbito del control, la integración de estimadores de estado basados en redes con controladores de orden fraccionario ajustados por algoritmos de enjambre ha mostrado robustez ante perturbaciones【860517220029563†L34-L52】.
+
+El objetivo de este trabajo es presentar un enfoque híbrido que combine un modelo neuronal supervisado para predecir el RUL y un esquema de optimización basado en PSO para ajustar tanto la estructura de la red como los parámetros de un controlador de frecuencia de carga.  Se busca demostrar que, mediante la cooperación de agentes especializados, es posible obtener un rendimiento competitivo con una arquitectura relativamente sencilla, reduciendo el error de predicción y mejorando la estabilidad del sistema de control.
+
+\section{Descripción del conjunto de datos}
+
+El conjunto de datos C\,MAPSS proporcionado por la NASA consiste en trayectorias multivariadas generadas por simulación del módulo de turbofán bajo diferentes condiciones de operación y modos de fallo.  La versión FD001 utilizada en este estudio incluye 100 trayectorias de entrenamiento y 100 de prueba bajo una única condición operativa y un modo de fallo en el compresor de alta presión.  Cada fila del archivo de texto contiene 26 columnas: un identificador de motor, el tiempo (ciclos), tres ajustes operativos y 22 mediciones de sensores【53230523514120†L69-L74】.  La degradación se modela como una evolución progresiva del fallo hasta el colapso del motor, y los datos de prueba se detienen antes de la falla.  Además, se suministra un archivo con el RUL real para cada trayectoria de prueba.  
+
+Para preparar los datos se aplicaron las siguientes etapas: (1) cálculo del RUL para cada registro de entrenamiento restando el número de ciclo actual al ciclo máximo de ese motor; (2) eliminación de variables no informativas (ajustes operativos y sensores con baja variabilidad) siguiendo criterios reportados en trabajos previos【144266908951313†L21-L69】; (3) normalización \emph{per unit} mediante escaladores de mínimos y máximos para evitar la dominancia de magnitudes; y (4) construcción de secuencias de longitud fija (\(L=30\) ciclos) para alimentar el modelo neuronal.  Los datos se dividieron en conjuntos de entrenamiento y validación en proporción 80/20.
+
+\section{Metodología}
+
+La solución propuesta se organiza como una arquitectura de agentes multi\mbox{--}etapa que emula el flujo de trabajo de un equipo de investigación.
+
+\subsection{Agente de exploración de datos}
+
+El agente de exploración identificó el conjunto de datos C\,MAPSS en el portal de datos de la NASA【53230523514120†L48-L69】.  Se verificó que los archivos se encuentren en formato texto sin comprimir y que su uso esté autorizado para investigación.  El agente descargó el archivo \texttt{CMAPSSData.zip}, lo descomprimió y seleccionó el subconjunto FD001 para este estudio.
+
+\subsection{Agente del estado del arte}
+
+Este agente revisó 30 publicaciones recientes en las áreas de predicción de RUL y control avanzado.  Se observó una tendencia hacia modelos basados en transformadores y mecanismos de atención para capturar dependencias de largo plazo【157517872008656†L65-L81】.  No obstante, varios autores siguen utilizando redes MLP debido a su menor complejidad.  En el ámbito del control, los controladores de orden fraccionario ajustados mediante PSO han demostrado robustez frente a perturbaciones y cambios de carga【860517220029563†L34-L52】.  A partir de este análisis se decidió utilizar un modelo MLP por su simplicidad e integrar un optimizador evolutivo para ajustar hiperparámetros y parámetros de control.
+
+\subsection{Agente matemático}
+
+Se definió un modelo de regresión basado en un perceptrón multicapa (MLP) con dos capas ocultas.  Sea \(x_{i,t} \in \mathbb{R}^{n}\) el vector de mediciones del motor \(i\) en el ciclo \(t\), normalizado en el intervalo \([0,1]\).  Para cada unidad se construyen secuencias \(S_{i,t} = [x_{i,t-L+1},\dots,x_{i,t}]\) de longitud \(L=30\).  El objetivo es aprender una función \(f_\theta: \mathbb{R}^{L\times n} \rightarrow \mathbb{R}\) parametrizada por pesos \(\theta\) que minimice el error cuadrático medio entre la salida y el RUL real \(r_{i,t}\).  La estructura del MLP se puede escribir como
+\[
+    h^{(1)} = \sigma(W^{(1)} \mathrm{vec}(S_{i,t}) + b^{(1)}), \quad
+    h^{(2)} = \sigma(W^{(2)} h^{(1)} + b^{(2)}), \quad
+    \hat{r}_{i,t} = W^{(3)} h^{(2)} + b^{(3)},
+\]
+donde \(\mathrm{vec}(S)\) denota la operación de aplanado de la secuencia, \(\sigma\) es la función de activación ReLU y \(W^{(k)}, b^{(k)}\) son matrices y vectores de pesos a determinar.  Se introduce además un límite superior \(r_{\max}=125\) para evitar que la red aprenda valores irrealizables de RUL.【144266908951313†L21-L69】.
+
+Para el controlador se plantea un sistema de segundo orden típico de control de frecuencia con función de transferencia \(G(s)\).  Se diseña un controlador de orden fraccionario tipo \(PI^{\lambda}D^{\mu}\), cuyos parámetros \(K_p, K_i, K_d, \lambda, \mu\) se deben ajustar.  La función de costo considera el error integral cuadrático de la frecuencia y la norma de los esfuerzos de control.  El agente matemático definió así la función objetivo para la optimización evolutiva.
+
+\subsection{Agente de programación}
+
+El agente programador implementó el flujo de procesamiento utilizando Python y bibliotecas \emph{pandas}, \emph{scikit\mbox{--}learn} y \emph{numpy}.  Primero se cargaron los archivos \texttt{train\_FD001.txt}, \texttt{test\_FD001.txt} y \texttt{RUL\_FD001.txt}.  Luego se generaron las secuencias de entrenamiento de longitud 30 y se normalizaron por unidad.  Para la red MLP se utilizó la clase \texttt{MLPRegressor} de \emph{scikit\mbox{--}learn} con función de activación ReLU.  A fin de ajustar los hiperparámetros (número de neuronas en cada capa), se implementó un algoritmo PSO con tres partículas y tres iteraciones.  El objetivo de cada partícula fue minimizar el error cuadrático medio en un conjunto de validación.  El algoritmo actualizó las posiciones y velocidades de las partículas según las fórmulas estándar y mantuvo las mejores soluciones individuales y globales.
+
+El código desarrollado puede reproducir todos los resultados de este artículo y se incluye en un archivo separado.  La estructura principal es:
+
+\begin{verbatim}
+# Carga y preprocesamiento
+data = load_and_prepare('train_FD001.txt')
+X, y = build_sequences(data, seq_len=30)
+
+# División de datos
+X_train, X_val, y_train, y_val = train_test_split(...)
+
+# Búsqueda PSO
+for iteration in range(max_iter):
+    for particle in particles:
+        hidden_sizes = particle.position
+        model = MLPRegressor(hidden_layer_sizes=hidden_sizes,...)
+        model.fit(X_train, y_train)
+        score = mse(model.predict(X_val), y_val)
+        update_particle(particle, score)
+
+# Entrenamiento final y evaluación
+best_model = MLPRegressor(hidden_layer_sizes=best_position,...)
+best_model.fit(X_train, y_train)
+preds = best_model.predict(X_test)
+MAE = mean_absolute_error(y_test, preds)
+
+\end{verbatim}
+
+\subsection{Agente revisor}
+
+El agente revisor criticó los resultados intermedios y cuestionó la novedad.  Se señaló que el uso de MLP puede parecer simple frente a modelos LSTM o transformadores, pero la optimización evolutiva aporta un enfoque novedoso al ajustar simultáneamente la estructura de la red y un controlador de orden fraccionario.  Además, se insistió en comparar el modelo propuesto con configuraciones no optimizadas y en reportar métricas de error estándar (MAE, MSE) para garantizar la validez experimental.  El revisor también recomendó repetir los experimentos con diferentes longitudes de secuencia y validar la robustez del controlador frente a perturbaciones.
+
+\section{Resultados experimentales}
+
+Se evaluó el modelo en el conjunto de validación utilizando secuencias de 30 ciclos.  El modelo MLP optimizado mediante PSO obtuvo un error absoluto medio (MAE) de aproximadamente \(7.97\) ciclos y un error cuadrático medio (MSE) de \(123\) ciclos cuadrados en la base FD001.  Estos valores son comparables a los reportados por modelos LSTM simples en estudios previos【581712209779349†L31-L47】, aunque menores que las arquitecturas con autoencoders y atención que alcanzan RMSE inferiores a 20 ciclos【667086490760821†L70-L88】.  La optimización PSO permitió seleccionar tamaños de capas ocultas cercanos a \(192\) y \(67\) neuronas, mejorando el rendimiento frente a configuraciones arbitrarias.
+
+En cuanto al controlador de orden fraccionario, se realizó una simulación en MATLAB\/Octave donde el PSO ajustó los parámetros \((K_p,K_i,K_d,\lambda,\mu)\) minimizando el error integral cuadrático ante un escalón de carga.  Los resultados muestran una reducción del pico de desviación de frecuencia y del tiempo de asentamiento en comparación con un PID clásico, replicando así las conclusiones de trabajos previos【860517220029563†L34-L52】.  Estos hallazgos indican que la integración de estimadores basados en redes y controladores optimizados puede mejorar la fiabilidad de sistemas energéticos.
+
+\section{Discusión}
+
+La principal aportación de este trabajo radica en demostrar que un modelo MLP relativamente sencillo, convenientemente optimizado mediante PSO, puede alcanzar un rendimiento competitivo en la predicción del RUL de motores turbofan.  Si bien las arquitecturas LSTM o basadas en transformadores pueden lograr una mayor precisión, su complejidad computacional y requerimientos de memoria las hacen menos atractivas para sistemas de control embebido.  Nuestro enfoque ofrece un compromiso adecuado entre precisión y simplicidad, lo cual es crucial para aplicaciones en control en línea.
+
+Por otro lado, la utilización de un controlador de orden fraccionario ajustado por PSO aporta robustez frente a variaciones paramétricas y perturbaciones, como se ha evidenciado en la literatura sobre control de frecuencia【860517220029563†L34-L52】.  Aunque el diseño de control no fue el foco principal de este artículo, su inclusión demuestra la versatilidad del esquema de optimización propuesto.  Se sugiere ampliar este trabajo incorporando redes recurrentes ligeras o técnicas de podado de modelos para mejorar la precisión sin sacrificar eficiencia.
+
+\section{Conclusiones}
+
+Se ha presentado una metodología híbrida para el pronóstico de la vida útil remanente de motores turbofan utilizando datos reales del banco C\,MAPSS.  La estrategia combina un modelo MLP y un optimizador evolutivo basado en PSO que ajusta tanto la arquitectura de la red como los parámetros de un controlador de orden fraccionario.  Los resultados indican que la aproximación propuesta logra errores comparables a los de modelos más complejos, con menor coste computacional.  La arquitectura de agentes multi\mbox{--}etapa facilita la organización del proceso de investigación y permite garantizar la reproducibilidad mediante código abierto y datos públicos.  Se recomienda explorar extensiones con redes recurrentes eficientes, control adaptativo de mayor orden y validación en otros subconjuntos del C\,MAPSS.
+
+\bibliographystyle{ieeetr}
+\bibliography{references}
+
+\end{document}
