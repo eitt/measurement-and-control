@@ -1,7 +1,3 @@
-Here is the updated `README.md` reflecting the new capabilities of the universal script, the consolidated dashboard, and the robust control optimization.
-
----
-
 #Universal CMAPSS RUL Prediction & Robust FOPID ControlThis project implements a comprehensive framework for **Remaining Useful Life (RUL)** prediction across all four NASA CMAPSS jet engine datasets (`FD001` through `FD004`). It integrates a Particle Swarm Optimization (PSO) tuned Neural Network (MLP) for prognosis and a robust **Fractional Order PID (FOPID)** controller for system stability.
 
 ##Key Features* **Multi-Dataset Analysis:** Automatically loops through and processes `FD001`, `FD002`, `FD003`, and `FD004` to compare performance across varying operating conditions and fault modes.
