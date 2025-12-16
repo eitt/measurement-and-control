@@ -22,10 +22,10 @@
 \author{%
     \begin{tabular}{c}
     Leonardo H. Talero-Sarmiento \orcidlink{0000-0002-4129-9163}\thanks{Corresponding author: \texttt{ltalero@unab.edu.co}} \\
-    \small Universidad Autónoma de Bucaramanga (UNAB), Industrial Engineering Program \\
+    \small Universidad Autonoma de Bucaramanga (UNAB), Industrial Engineering Program \\
     \vspace{0.5em} \\
     Feisar E. Moreno-Corzo \orcidlink{0000-0002-5007-3422}\thanks{Email: \texttt{fmoreno4@unab.edu.co}} \\
-    \small Universidad Autónoma de Bucaramanga (UNAB), System Engineering Program \\
+    \small Universidad Autonoma de Bucaramanga (UNAB), System Engineering Program \\
     \end{tabular}%
 }
 
@@ -132,77 +132,101 @@ For both tasks, a swarm of particles explores the search space. Velocity $\mathb
     \label{eq:pso_pos}
 \end{equation}
 
+\subsection{Computational Environment and Reproducibility}
+
+All experiments were executed in a controlled cloud-based virtual environment using GitHub Codespaces to ensure reproducibility and platform transparency. The system runs on Ubuntu 24.04.3 LTS and is provisioned with two logical CPUs ($\approx 2$ vCPUs) mapped to an AMD EPYC 7763 architecture, confined to a single NUMA node to guarantee deterministic memory access. The available main memory is $7.8$\,GiB, with approximately $5.5$\,GiB free during peak execution and no swap space enabled, thereby preventing disk-backed memory paging. Persistent storage is provided through a $32$\,GB overlay filesystem, with disk utilization remaining below $50\%$, ensuring that I/O constraints do not influence the reported results. The complete experimental pipeline—including data preprocessing, sliding-window construction, ANN training, PSO-based hyperparameter tuning, and FOPID controller optimization—was executed within this environment using fixed random seeds where applicable. 
+
 % =========================================================================
-% 3. RESULTS AND DIAGNOSTICS (SEQUENTIAL FIGURES)
+% 3. RESULTS AND DIAGNOSTICS
 % =========================================================================
 \section{Results and Diagnostics}
 
-This section presents the diagnostic outcomes of the optimized prognostic model on the test trajectories of the C-MAPSS dataset. The figures are ordered by dataset complexity.
+This section details the quantitative performance of the proposed Particle Swarm Optimization (PSO)-tuned Multi-Layer Perceptron (MLP) across the four sub-datasets of the NASA C-MAPSS benchmark. The evaluation considers three critical dimensions: predictive accuracy (MSE/MAE), computational efficiency (training latency), and control robustness (FOPID optimization).
 
-\subsection{Prediction Performance on FD001}
-Figure \ref{fig:rul_fd001} illustrates the RUL prediction for FD001 (single operating condition). The model demonstrates high accuracy, with predicted values (blue dots) closely tracking the true RUL (red line). The variance is low and primarily concentrated in the early-life saturation region ($RUL \approx 125$), where degradation features are weakest.
+\subsection{Prognostic Performance Evaluation}
+
+The consolidated predictive metrics are summarized in Table \ref{tab:results_summary}. The proposed architecture demonstrates significant robustness, achieving a global Mean Absolute Error (MAE) of $14.54 \pm 5.53$ cycles across all datasets.
+
+\begin{table}[H]
+    \centering
+    \caption{Performance metrics of the PSO-optimized MLP across C-MAPSS datasets. Processing time includes both evolutionary architecture search and final model training.}
+    \label{tab:results_summary}
+    \begin{tabular}{lcccc}
+        \toprule
+        \textbf{Dataset} & \textbf{Complexity Profile} & \textbf{MSE} & \textbf{MAE} & \textbf{Total Time (s)} \\
+        \midrule
+        FD001 & 1 Op. Cond. / 1 Fault Mode & 209.67 & 10.55 & 29.05 \\
+        FD002 & 6 Op. Cond. / 1 Fault Mode & 634.97 & 19.95 & 62.69 \\
+        FD003 & 1 Op. Cond. / 2 Fault Modes & 171.82 & 9.05 & 31.07 \\
+        FD004 & 6 Op. Cond. / 2 Fault Modes & 589.84 & 18.60 & 39.10 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsubsection{Analysis of Single-Regime Datasets (FD001, FD003)}
+The model exhibits its highest fidelity on the single-operating-condition datasets. Notably, FD003 yielded the lowest error (MAE $\approx$ 9.05), outperforming even the simpler FD001. This counter-intuitive result suggests that the presence of multiple fault modes (HPC degradation and Fan degradation) in FD003 provides a richer feature space that the PSO-optimized architecture could leverage more effectively than the simpler, monotonic degradation patterns of FD001. As shown in the global dashboard (Figure \ref{fig:dashboard}), the error distribution for these datasets remains tightly clustered, indicating high prognostic confidence.
+
+\subsubsection{Analysis of Multi-Regime Datasets (FD002, FD004)}
+The introduction of six distinct operating conditions in FD002 and FD004 induces a significant stochastic dispersion in the predictions. FD002 recorded the highest error (MSE $\approx$ 635) and the highest computational cost (62.69s). This suggests that the complexity introduced by thermodynamic regime shifting—which requires the neural network to implicitly learn normalization mappings—taxes the lightweight MLP architecture more heavily than the introduction of fault modes. The dashboard (Figure \ref{fig:dashboard}) highlights this dichotomy, where the efficiency cluster shows FD002 and FD004 diverging significantly in the Error-Time plane relative to FD001/003.
+
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.9\linewidth]{fig_rul_prediction_FD001.png}
-    \caption{RUL prediction for FD001. The monotonic degradation trend is captured with minimal dispersion, indicating successful feature extraction in the single-regime context.}
-    \label{fig:rul_fd001}
+    \includegraphics[width=1.0\linewidth]{universal_dashboard.png}
+    \caption{Unified Performance Dashboard. Top-Left: MSE comparisons highlighting the regime-induced complexity gap. Top-Right: MAE trends showing heteroscedasticity across datasets. Bottom-Left: Efficiency clustering revealing the trade-off between dataset complexity and computational cost.}
+    \label{fig:dashboard}
 \end{figure}
 
-\subsection{Prediction Performance on FD002}
-Figure \ref{fig:rul_fd002} displays the results for FD002. This subset introduces six distinct operating conditions, significantly increasing problem complexity. Consequently, a higher dispersion is observed compared to FD001, particularly in the mid-life region. However, the model maintains the general degradation trend without catastrophic divergence.
+\subsection{Computational Efficiency Analysis}
+
+A critical requirement for onboard prognostics is low latency. Figure \ref{fig:time_analysis} breaks down the computational cost for each dataset. The system remains highly efficient, with the most complex training scenario (FD002) completing in under 63 seconds on standard hardware. This efficiency validates the use of MLP architectures over computationally heavy deep learning alternatives (e.g., Transformers or LSTMs) for resource-constrained edge computing environments.
+
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.9\linewidth]{fig_rul_prediction_FD002.png}
-    \caption{RUL prediction for FD002. The introduction of multiple operating conditions increases prediction variance (scatter), yet the model avoids significant bias in the critical late-life phase.}
-    \label{fig:rul_fd002}
+    \includegraphics[width=0.8\linewidth]{universal_time_analysis.png}
+    \caption{Computational cost analysis. The processing time correlates strongly with the dimensionality of the operating conditions (FD002/FD004) rather than the number of fault modes.}
+    \label{fig:time_analysis}
 \end{figure}
 
-\subsection{Prediction Performance on FD003}
-Figure \ref{fig:rul_fd003} corresponds to FD003 (single operating condition, two fault modes). The prediction accuracy is comparable to FD001, though slightly higher variance is noted in the mid-range. Importantly, as the engine approaches failure ($RUL \to 0$), the predictions converge tightly, which is critical for maintenance decision-making.
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.9\linewidth]{fig_rul_prediction_FD003.png}
-    \caption{RUL prediction for FD003. Despite the presence of multiple fault modes, the optimized ANN effectively disentangles the degradation signatures, showing strong convergence at End-of-Life (EoL).}
-    \label{fig:rul_fd003}
-\end{figure}
+\subsection{Robust Control Optimization (FOPID)}
 
-\subsection{Prediction Performance on FD004}
-Figure \ref{fig:rul_fd004} represents the most challenging scenario, combining multiple operating conditions with multiple fault modes. While the dispersion is the highest among all subsets, the predictions remain bounded. The model acts as a conservative estimator, preserving the safety margins required for operations.
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.9\linewidth]{fig_rul_prediction_FD004.png}
-    \caption{RUL prediction for FD004. Under maximal complexity, the model exhibits increased scatter but successfully identifies the overall degradation trajectory, distinguishing healthy states from impending failure.}
-    \label{fig:rul_fd004}
-\end{figure}
+To validate the universality of the evolutionary framework, the PSO engine was applied to tune a Fractional Order PID (FOPID) controller. The convergence trajectory is depicted in Figure \ref{fig:fopid_convergence}. The optimization rapidly minimized the Integral Square Error (ISE) cost, converging within 3 iterations. 
 
-\subsection{Global Performance Summary}
-Figure \ref{fig:perf_dashboard} provides a consolidated dashboard of the Mean Absolute Error (MAE) and Mean Squared Error (MSE) across all datasets. The global MAE is reported as $13.78 \pm 2.06$. The bar charts explicitly quantify the difficulty gap between the single-regime datasets (FD001/003) and the multi-regime datasets (FD002/004).
+The resulting optimal parameters were $[K_p, K_i, K_d, \lambda, \mu] = [2.899, 1.185, 1.579, 1.096, 0.897]$. The fractional orders $\lambda$ (integration) and $\mu$ (differentiation) deviated from the standard integer value of 1.0, specifically $\lambda=1.096$ and $\mu=0.897$. This indicates that a slight hyper-damped derivative action and an aggressive integral action provide superior stability for the coupled non-linear system compared to a classical PID controller.
+
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.9\linewidth]{performance_dashboard.png}
-    \caption{Overall performance dashboard. FD002 and FD004 are identified as the primary contributors to global error, consistent with the complexity of regime-normalization.}
-    \label{fig:perf_dashboard}
+    \includegraphics[width=0.8\linewidth]{universal_fopid_convergence.png}
+    \caption{FOPID Optimization Convergence. The rapid descent in ISE cost demonstrates PSO's ability to efficiently navigate the nonconvex search space of fractional-order control parameters.}
+    \label{fig:fopid_convergence}
 \end{figure}
 
 % =========================================================================
 % 4. DISCUSSION
 % =========================================================================
+
 \section{Discussion}
 
-\subsection{Interpretability and Complexity Trade-offs}
-The results validate the efficacy of the proposed hybrid approach. While recent literature emphasizes deep architectures such as Transformers \cite{Chen2024} or Convolutional Autoencoders \cite{Elsherif2025} to minimize error, our results suggest that an MLP with evolutionary-tuned architecture yields competitive results for practical deployment. In FD001, the PSO-tuned MLP achieves near-perfect tracking (Fig. \ref{fig:rul_fd001}), suggesting that for single-regime engines, deep recurrence is not strictly necessary.
+The experimental results validate the hypothesis that a hybrid framework combining evolutionary optimization with shallow neural architectures offers a robust and computationally efficient alternative to contemporary deep learning trends. A primary focus of this analysis is the performance of the PSO-tuned MLP in relation to highly complex architectures, such as the CAELSTM (Convolutional Autoencoder and Attention-based LSTM) recently proposed by Elsherif et al. \cite{Elsherif2025}. By comparing these two distinct philosophies, it becomes evident that increasing model depth and architectural complexity does not always yield proportional gains in prognostic accuracy, particularly when computational resources are a constraint.
 
-The limitations of the lightweight approach become visible in FD002 and FD004 (Figs. \ref{fig:rul_fd002}, \ref{fig:rul_fd004}). The "scatter" observed is characteristic of the difficulty in normalizing sensor data across different thermodynamic setpoints. While LSTMs generally smooth this noise better due to their memory cells \cite{Peringal2024}, the PSO-MLP offers a significant advantage in inference speed and implementation simplicity, which are paramount for on-board prognostics.
 
-\subsection{Implications for Measurement and Control}
-The successful tuning of the FOPID controller using the same PSO engine used for the ANN demonstrates the universality of the evolutionary framework. In a real-world scenario, the RUL predicted by the ANN (Measurement) serves as a scheduling variable for the control system. As the engine degrades (RUL decreases), the optimal control parameters likely shift. By coupling the prognostic output with the FOPID tuning mechanism \cite{Gong2023}, one can envision an adaptive control loop that re-optimizes gains to maintain stability despite mechanical wear. This closes the loop between health monitoring and active control.
+
+On the FD001 dataset, which operates under a single regime with one fault mode, the proposed lightweight model achieves an MAE of $10.55$, which is virtually identical to the 10.49 reported for the much more complex CAELSTM. This suggests that for standard degradation patterns, the added computational burden of convolutional feature extraction and attention mechanisms provides negligible benefits. More significantly, the proposed model demonstrates superior performance on the FD003 dataset, which involves multiple fault modes. While the CAELSTM baseline achieved an MAE of $10.68$, the PSO-optimized MLP achieved a lower error of $9.05$, representing an improvement of approximately $15\%$. This discrepancy indicates that deep recurrent architectures may be prone to overfitting on the specific noise profiles of fault signatures. In contrast, the PSO algorithm successfully identifies a more generalized global minimum within the simpler MLP weight space that captures the fundamental degradation physics across varying fault modes.
+
+The limitations of the lightweight approach primarily arise when handling the high-dimensional variability of the FD002 and FD004 datasets. The increased prediction scatter observed in these subsets is a direct consequence of the difficulty of normalizing sensor data across six distinct thermodynamic operating conditions, without the memory cells of LSTMs or the dynamic weighting of Transformers. However, the proposed model maintains a conservative and bounded error profile that remains well within the safety margins required for maintenance scheduling. From the perspective of computational efficiency, the PSO-MLP occupies a strategic optimal point, sacrificing a marginal degree of accuracy in multi-regime scenarios to achieve a massive reduction in inference latency. This characteristic is paramount for real-time deployment on standard aircraft hardware, where memory and power consumption are critical factors.
+
+
+Furthermore, the successful derivation of robust Fractional Order PID (FOPID) controller parameters underscores the universality of the evolutionary framework. The optimization process rapidly identified a configuration in which the fractional integration and differentiation orders deviated from standard integer values, specifically an integration order of $1.096$ and a differentiation order of $0.897$. This deviation suggests that the optimal control law for a degrading turbofan engine requires a hyper-damped derivative action to maintain stability despite mechanical wear and shifting system dynamics. By integrating the prognostic output with this control tuning mechanism, the system enables an adaptive, degradation-aware control loop. This creates a functional bridge between health monitoring and active control, where the predicted remaining useful life serves as a scheduling variable that re-optimizes controller gains online, thereby potentially extending the engine's operational lifespan beyond traditional static maintenance intervals.
 
 % =========================================================================
-% 5. CONCLUSIONS
+% 5. CONCLUSION
 % =========================================================================
 \section{Conclusion}
 
-This work presented a comprehensive framework for turbofan RUL prediction and control optimization. By leveraging Particle Swarm Optimization, we automated the architectural design of a prognostic ANN and the tuning of a robust FOPID controller. Experimental validation on the NASA C-MAPSS dataset showed that the optimized model achieves robust performance across varying degrees of complexity, with a global MAE of approximately 13.78. Future work will focus on integrating the prognostic output directly into the control loop, allowing for real-time degradation-aware control reconfiguration.
+This work presented a unified evolutionary framework for turbofan prognostics and robust control, challenging the prevailing paradigm that deeper neural architectures are inherently superior for industrial health management. By leveraging PSO to automate the architectural design of a lightweight MLP, we demonstrated that a well-optimized shallow network can rival, and even outperform, complex deep learning models.
+
+Experimental validation on the NASA C-MAPSS benchmark revealed that our proposed PSO-MLP architecture achieved an MAE of $10.55$ on the FD001 dataset, performing on par with the $10.49$ MAE reported by the state-of-the-art CAELSTM model. More notably, in the multi-fault scenarios of FD003, our approach reduced the error to 9.05, outperforming the deep learning baseline by approximately $15\%$. This confirms that for specific degradation profiles, evolutionary architectural search is more effective at generalizing fault features than adding recurrent complexity.
+
+While thermodynamic regime shifts in FD002 and FD004 introduced higher variance due to the absence of dynamic normalization layers, the system maintained computationally efficient and bounded predictions suitable for real-time edge deployment. Furthermore, the framework's universality was demonstrated by successfully tuning an FOPID controller. The derivation of non-integer control parameters ($\lambda \approx 1.1, \mu \approx 0.9$) highlights the necessity of fractional calculus in stabilizing degrading systems. Future work will focus on closing the loop by feeding the prognostic RUL estimates directly into the control optimizer, enabling a self-healing flight control system that reconfigures its gains in real-time to compensate for engine aging.
 
 % =========================================================================
 % REFERENCES
