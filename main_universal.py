@@ -31,13 +31,17 @@ plt.rcParams.update({'font.size': 11, 'figure.dpi': 300})
 
 DATASETS = ['FD001', 'FD002', 'FD003', 'FD004']
 # DATASETS = ['FD004'] # Descomentar para probar solo uno rápido
-DATA_DIR = "."  # Carpeta donde estan los .txt
+
+# --- FIX: Updated path to match your folder structure ---
+DATA_DIR = os.path.join("data", "CMAPSSData") 
+# --------------------------------------------------------
 
 # ==========================================
 # 1. CORE FUNCTIONS (Data & Models)
 # ==========================================
 
 def load_data(dataset_name):
+    # This now looks in data/CMAPSSData/train_FD00x.txt
     path = os.path.join(DATA_DIR, f"train_{dataset_name}.txt")
     if not os.path.exists(path):
         print(f"[WARN] File not found: {path}. Skipping...")
@@ -299,6 +303,14 @@ def main():
 
     # Convert to DataFrame
     results_df = pd.DataFrame(results_storage)
+    
+    # --- FIX: Guardrail against empty data ---
+    if results_df.empty:
+        print("\n[ERROR] No data found! Please check 'DATA_DIR' path.")
+        print(f"Looking in: {os.path.abspath(DATA_DIR)}")
+        return
+    # -----------------------------------------
+
     print("\n[INFO] All Datasets Processed. Results:")
     print(results_df[['Dataset', 'MSE', 'MAE', 'Time_Total']])
     
