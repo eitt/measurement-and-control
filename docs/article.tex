@@ -54,88 +54,93 @@ The NASA Commercial Modular Aero-Propulsion System Simulation (C-MAPSS) dataset 
 However, the increasing depth of these models often incurs high computational costs, limiting their deployment in resource-constrained embedded systems. Furthermore, architecture selection is frequently heuristic. To address this, Xue et al. \cite{Xue2025} emphasized the necessity of automated hyperparameter optimization, employing Bayesian methods to tune Trans-LSTM networks.
 
 This paper proposes a unified framework that bridges the gap between efficient prognosis and robust control using evolutionary computation. We introduce a methodology where Particle Swarm Optimization (PSO) is utilized as a common optimization engine to: (1) automatically select the optimal architecture of a lightweight MLP for RUL prediction, and (2) tune the parameters of a Fractional-Order PID (FOPID) controller. The FOPID approach, inspired by Gong et al. \cite{Gong2023}, offers superior degree-of-freedom control for complex plants compared to integer-order PID. By combining these distinct but related tasks under a single evolutionary framework, we demonstrate a holistic approach to \textit{Measurement and Control}: measuring the health state via optimized regression and controlling the system dynamics via optimized feedback loops.
-
 % =========================================================================
 % 2. MATERIALS AND METHODS
 % =========================================================================
 \section{Materials and Methods}
 
-\subsection{Dataset and Preprocessing}
+\subsection{Dataset Characterization and Preprocessing}
 
 \subsubsection{NASA C-MAPSS Turbofan Degradation Dataset}
-This study is based on the NASA C-MAPSS turbofan engine degradation dataset \cite{Saxena2008}, specifically the four standard subsets FD001 through FD004. Each subset contains multivariate time series data from multiple engine units running until failure. The data includes an engine identifier, cycle index, three operational settings, and 21 sensor measurements describing thermodynamic and mechanical states.
+This study utilizes the Commercial Modular Aero-Propulsion System Simulation (C-MAPSS) dataset \cite{Saxena2008}, widely regarded as the gold standard for benchmarking prognostic algorithms. The dataset consists of multivariate time-series data generated from a high-fidelity thermodynamic simulation of a 90,000 lb thrust class turbofan engine. The simulation captures the degradation of rotating sub-components (High-Pressure Compressor, Fan, etc.) under varying operational profiles.
 
-The subsets are categorized by increasing prognostic complexity:
-\begin{itemize}
-    \item \textbf{FD001 \& FD003:} Single operating condition.
-    \item \textbf{FD002 \& FD004:} Multiple operating conditions (six regimes).
-    \item \textbf{FD003 \& FD004:} Multiple fault modes (HPC degradation and Fan degradation).
-\end{itemize}
+To evaluate the generalization capability of the proposed model, we employ all four subsets (FD001–FD004). As detailed in Table \ref{tab:dataset_stats}, these subsets represent a hierarchy of complexity, ranging from stationary operations to complex flights with multiple failure modes. This aligns with recent benchmarks \cite{Elsherif2025}, allowing for a direct comparison of algorithmic robustness.
 
-\subsubsection{Remaining Useful Life Target Definition}
-For each engine unit $i$ at cycle $c$, the RUL is defined as the difference between the unit's total life $C_i^{\max}$ and the current cycle:
-\begin{equation}
-    \mathrm{RUL}_{i,c} = C_i^{\max} - c.
-    \label{eq:rul_def}
-\end{equation}
-To prevent the learning process from being dominated by early-life healthy states where RUL is essentially constant, the target is rectified (capped) at a threshold $R_{\max}=125$ cycles:
-\begin{equation}
-    \mathrm{RUL}^{\mathrm{cap}}_{i,c} = \min\left(\mathrm{RUL}_{i,c}, R_{\max}\right).
-    \label{eq:rul_cap}
-\end{equation}
+\begin{table}[h]
+    \centering
+    \caption{Detailed characteristics of the C-MAPSS sub-datasets. The complexity increases from FD001 (baseline) to FD004 (multiple regimes and faults).}
+    \label{tab:dataset_stats}
+    \begin{tabular}{lcccc}
+        \toprule
+        \textbf{Dataset} & \textbf{Op. Conditions} & \textbf{Fault Modes} & \textbf{Train Trajectories} & \textbf{Test Trajectories} \\
+        \midrule
+        \textbf{FD001} & 1 (Sea Level) & 1 (HPC Degr.) & 100 & 100 \\
+        \textbf{FD002} & 6 (Mixed) & 1 (HPC Degr.) & 260 & 259 \\
+        \textbf{FD003} & 1 (Sea Level) & 2 (HPC, Fan Degr.) & 100 & 100 \\
+        \textbf{FD004} & 6 (Mixed) & 2 (HPC, Fan Degr.) & 249 & 248 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
 
-\subsubsection{Feature Engineering and Normalization}
-Low-variance sensors and constant operational settings (in FD001/FD003) are removed via variance screening. Let $\mathbf{x}_{i,c}\in\mathbb{R}^{d}$ denote the feature vector. To handle the varying scales of sensors (e.g., temperatures vs. pressures), min-max normalization is applied per engine unit:
+\subsubsection{Feature Selection and Normalization}
+The raw data contains 21 sensor channels and 3 operational settings. Consistent with the methodology in \cite{Elsherif2025}, we perform a variance thresholding analysis. Sensors with constant output or negligible variance across the degradation lifecycle (specifically Sensors 1, 5, 6, 10, 16, 18, and 19) are discarded as they contribute no prognostic value.
+
+The remaining 14 sensors exhibit different physical units (e.g., Temperature in Rankine vs. Pressure in psi). To prevent gradient dominance by larger magnitudes, we apply Min-Max normalization per engine unit $i$. Let $\mathbf{x}_{i,c}\in\mathbb{R}^{d}$ denote the feature vector at cycle $c$:
 \begin{equation}
-    \tilde{\mathbf{x}}_{i,c}=\frac{\mathbf{x}_{i,c}-\min(\mathbf{x}_i)}{\max(\mathbf{x}_i)-\min(\mathbf{x}_i)}.
+    \tilde{\mathbf{x}}_{i,c}=\frac{\mathbf{x}_{i,c}-\min(\mathbf{X}_i)}{\max(\mathbf{X}_i)-\min(\mathbf{X}_i)}.
     \label{eq:normalization}
 \end{equation}
 
-\subsubsection{Temporal Sequence Construction}
-Temporal dependencies are encoded using sliding windows of length $L=30$. The input matrix $\mathbf{X}_{i,k}$ and target $y_{i,k}$ are formed as:
+\subsubsection{Piecewise Linear RUL Target Definition}
+Defining the ground truth RUL is critical. Physical degradation is often negligible during the early phase of the engine's life. Following the "Piecewise Linear" (PWL) assumption dominant in the literature, we clip the target RUL at a saturation threshold $R_{\max}$. This prevents the model from attempting to predict RULs in the healthy state where no spectral signature of failure exists.
+For unit $i$ at cycle $c$ with total life $C_i^{\max}$, the target $y_{i,c}$ is:
+\begin{equation}
+    y_{i,c} = \min\left(C_i^{\max} - c, \ R_{\max}\right).
+    \label{eq:rul_cap}
+\end{equation}
+We set $R_{\max}=125$ cycles, consistent with the standard baseline.
+
+\subsubsection{Sliding Window Sequence Construction}
+To capture temporal dependencies without the computational overhead of recurrent memory cells, we employ a time-delay embedding strategy. We construct input matrices using a sliding window of length $L=30$. The input tensor $\mathbf{X}_{i,k}$ for the $k$-th prediction step is defined as:
 \begin{equation}
     \mathbf{X}_{i,k}=\left[\tilde{\mathbf{x}}_{i,k},\tilde{\mathbf{x}}_{i,k+1},\ldots,\tilde{\mathbf{x}}_{i,k+L-1}\right],
-    \qquad 
-    y_{i,k}=\mathrm{RUL}^{\mathrm{cap}}_{i,k+L-1}.
     \label{eq:sliding_window}
 \end{equation}
+where the associated label is the RUL at the last time step, $y_{i,k+L-1}$.
 
 \subsection{Evolutionary Optimization Framework}
 
-The core of the proposed methodology is a unified PSO engine used for two distinct tasks: architectural search for the prognostic model and parameter tuning for the control model.
+Unlike deep learning approaches that rely on manual architectural tuning or grid search, this work employs a unified Particle Swarm Optimization (PSO) engine. This stochastic method is applied to two distinct phases of the pipeline.
 
-
-
-\subsubsection{Task A: ANN Regressor Architecture Search}
-RUL estimation is performed by a Multi-Layer Perceptron (MLP). Instead of arbitrarily selecting the number of neurons, PSO is used to find the optimal size of the hidden layers, defined by the vector $\mathbf{p}_{ANN}=(h_1, h_2)$. The objective function is the validation Mean Squared Error (MSE):
+\subsubsection{Phase 1: Automated ANN Architecture Search}
+The prognostic model is a Multi-Layer Perceptron (MLP). The topology of the network significantly influences its capacity to generalize versus overfit. We treat the number of neurons in the hidden layers as continuous variables to be optimized. The PSO particle position is defined as $\mathbf{p}_{ANN}=(h_1, h_2)$, bounded by $[10, 100]$ neurons. The fitness function minimizes the validation Mean Squared Error (MSE):
 \begin{equation}
-    \mathcal{L}_{\mathrm{MSE}}=\frac{1}{N}\sum_{n=1}^{N}\left(y_n-\hat{y}_n\right)^2.
-    \label{eq:mse}
+    J_{ANN}(\mathbf{p}) = \frac{1}{N_{val}}\sum_{n=1}^{N_{val}}\left(y_n-\Phi(\mathbf{X}_n; \mathbf{p})\right)^2.
 \end{equation}
 
-\subsubsection{Task B: Fractional-Order PID (FOPID) Tuning}
-To demonstrate the control application, we optimize a FOPID controller $C(s)$ for a generic second-order plant. The controller is defined by five parameters $\mathbf{p}_{ctrl} = (K_p, K_i, K_d, \lambda, \mu)$:
+\subsubsection{Phase 2: Robust FOPID Control Tuning}
+To demonstrate the utility of the prognostic output, we optimize a Fractional-Order PID (FOPID) controller, $C(s)$, characterized by five degrees of freedom $\mathbf{p}_{ctrl} = (K_p, K_i, K_d, \lambda, \mu)$. The transfer function is given by:
 \begin{equation}
-    C(s) = K_p + \frac{K_i}{s^\lambda} + K_d s^\mu,
+    C(s) = K_p + \frac{K_i}{s^\lambda} + K_d s^\mu.
     \label{eq:fopid}
 \end{equation}
-where $\lambda$ and $\mu$ are the fractional orders of integration and differentiation, respectively. PSO minimizes the Integral of Squared Error (ISE) regarding a step response.
+The inclusion of fractional orders $\lambda, \mu \in (0, 2)$ allows for "hyper-damping" and greater robustness to plant non-linearities compared to integer-order PID. The PSO minimizes the Integral of Squared Error (ISE) of the closed-loop step response.
 
-\subsubsection{PSO Update Mechanics}
-For both tasks, a swarm of particles explores the search space. Velocity $\mathbf{v}$ and position $\mathbf{p}$ are updated as:
+\subsubsection{Swarm Dynamics}
+For both tasks, the velocity $\mathbf{v}$ and position $\mathbf{p}$ of each particle $j$ are updated according to the standard PSO kinematic equations:
 \begin{equation}
-    \mathbf{v}^{t+1}=\omega\mathbf{v}^{t}+c_1r_1\left(\mathbf{p}^{\mathrm{best}}-\mathbf{p}^{t}\right)+c_2r_2\left(\mathbf{g}^{\mathrm{best}}-\mathbf{p}^{t}\right),
-    \label{eq:pso_vel}
+    \mathbf{v}_j^{t+1} = \omega\mathbf{v}_j^{t} + c_1 r_1 (\mathbf{p}_j^{\mathrm{best}} - \mathbf{p}_j^{t}) + c_2 r_2 (\mathbf{g}^{\mathrm{best}} - \mathbf{p}_j^{t}),
 \end{equation}
 \begin{equation}
-    \mathbf{p}^{t+1}=\mathbf{p}^{t}+\mathbf{v}^{t+1}.
-    \label{eq:pso_pos}
+    \mathbf{p}_j^{t+1} = \mathbf{p}_j^{t} + \mathbf{v}_j^{t+1},
 \end{equation}
+where $\omega$ is the inertia weight, and $c_1, c_2$ are cognitive and social acceleration coefficients, respectively.
 
-\subsection{Computational Environment and Reproducibility}
+\subsection{Computational Environment}
 
-All experiments were executed in a controlled cloud-based virtual environment using GitHub Codespaces to ensure reproducibility and platform transparency. The system runs on Ubuntu 24.04.3 LTS and is provisioned with two logical CPUs ($\approx 2$ vCPUs) mapped to an AMD EPYC 7763 architecture, confined to a single NUMA node to guarantee deterministic memory access. The available main memory is $7.8$\,GiB, with approximately $5.5$\,GiB free during peak execution and no swap space enabled, thereby preventing disk-backed memory paging. Persistent storage is provided through a $32$\,GB overlay filesystem, with disk utilization remaining below $50\%$, ensuring that I/O constraints do not influence the reported results. The complete experimental pipeline—including data preprocessing, sliding-window construction, ANN training, PSO-based hyperparameter tuning, and FOPID controller optimization—was executed within this environment using fixed random seeds where applicable. 
+To verify the feasibility of the proposed approach in resource-constrained edge environments, all experiments were conducted in a controlled cloud-based container environment (GitHub Codespaces). The system runs Ubuntu 24.04.3 LTS, provisioned with an AMD EPYC 7763 processor ($\approx 2$ vCPUs) and $7.8$\,GiB of RAM. 
 
+Notably, unlike the SOTA baseline \cite{Elsherif2025} which necessitates GPU acceleration (e.g., NVIDIA T4 or similar) for training deep Convolutional-LSTM networks, our evolutionary MLP framework was trained entirely on CPU. The environment was confined to a single NUMA node to ensure deterministic memory access, with swap space disabled to prevent latency masking via disk paging. This setup rigorously tests the computational efficiency of the algorithms.
 % =========================================================================
 % 3. RESULTS AND DIAGNOSTICS
 % =========================================================================
