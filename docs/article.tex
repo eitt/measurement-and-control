@@ -7,7 +7,7 @@
 \usepackage{cite}
 \usepackage{booktabs}
 \usepackage{float}
-
+\usepackage{xcolor}
 \geometry{margin=1in}
 
 % =========================================================================
@@ -40,7 +40,7 @@
 % ABSTRACT
 % =========================================================================
 \begin{abstract}
-Predictive maintenance and robust control are twin pillars of modern industrial reliability. This paper presents a hybrid framework that synergizes data-driven prognostics with control-theoretic optimization. We propose a lightweight Artificial Neural Network (ANN) for predicting the Remaining Useful Life (RUL) of turbofan engines, utilizing the NASA C-MAPSS dataset. Unlike recent heavy deep learning architectures, our approach employs Particle Swarm Optimization (PSO) to dynamically tune the ANN architecture, balancing accuracy with computational efficiency. Furthermore, the evolutionary optimization framework is extended to the control domain, where a Fractional-Order PID (FOPID) controller is tuned via PSO to ensure stability in a simulated load-frequency system. The methodology allows for accurate degradation monitoring—validated across four complexity levels (FD001--FD004)—and demonstrates how prognostic data can inform robust control actions. The findings suggest that, for prognostic-driven decision-making and control applications, architectural optimization and system integration may be more critical than increasing representational depth.
+Predictive maintenance and robust control are twin pillars of modern industrial reliability. This paper presents a hybrid framework that synergizes data-driven prognostics with control-theoretic optimization. \color{red} Acá sugiero indicar el gap de literatura, por ejemplo, Recently, several large deep learning models have been proposed to address this task. However, such models typically require substantial effort for hyperparameter optimization and training, and often impose significant computational and capacity constraints at inference time. These limitations can be prohibitive in control-oriented architectures or resource-constrained decision-making settings.  To advance in a different direction, \color{black} we propose a lightweight Artificial Neural Network (ANN) for predicting the Remaining Useful Life (RUL) of turbofan engines, utilizing the NASA C-MAPSS dataset. Unlike recent heavy deep learning architectures, our approach employs Particle Swarm Optimization (PSO) to dynamically tune the ANN architecture, balancing accuracy with computational efficiency. Furthermore, the evolutionary optimization framework is extended to the control domain, where a Fractional-Order PID (FOPID) controller is tuned via PSO to ensure stability in a simulated load-frequency system. The methodology allows for accurate degradation monitoring—validated across four complexity levels (FD001--FD004)—and demonstrates how prognostic data can inform robust control actions. The findings suggest that, for prognostic-driven decision-making and control applications, architectural optimization and system integration may be more critical than increasing representational depth.
 
 \end{abstract}
 
@@ -59,11 +59,26 @@ The NASA Commercial Modular Aero-Propulsion System Simulation (C-MAPSS) dataset 
 
 \textcolor{blue}{To bridge this gap, this paper introduces a holistic architecture that couples a highly optimized, lightweight prognostic model with a robust control mechanism, actively prioritizing computational efficiency and environmental sustainability.} Building on this premise, a single Particle Swarm Optimization (PSO) engine is employed to address two tightly related tasks: (i) automated architecture selection for a \textcolor{blue}{computationally tractable and environmentally viable} MLP-based RUL predictor, and (ii) parameter tuning of a Fractional-Order PID (FOPID) controller. \textcolor{blue}{Instead of escalating network depth, we demonstrate that a precisely tuned, shallow ANN operating on explicit temporal embeddings is capable of capturing essential degradation trajectories while remaining small enough for practical edge deployment.} Inspired by the work of Gong et al.~\cite{Gong2023}, the FOPID controller introduces additional degrees of freedom through fractional integration and differentiation orders, enhancing robustness under nonlinear and degraded operating conditions. By coupling optimized health estimation with optimized feedback control, the proposed framework advances a holistic interpretation of \textit{Measurement and Control}, in which prognostic information is not an endpoint but a functional input to closed-loop system design.
 
+
+\color{red} Se pasa de la introducción a los materiales y métodos en mi opinión, deberíamos crear una breve revisión de literatura donde se muestren:  (1) los avances de machine learning y deep learning en la estimación de RUL (2) estimaciones de hiperparámetros en redes neuronales, considerando métodos tradicionales como grid search cross validation, random search cross validation y Bayesian Optimization (3) fractional order PID. Yo recomendaría incorporar referencias de journals Q1 WoS. \color{black}
+
+
+\color{red} recomiendo agregar un párrafo con el outline del paper
+
+
+Podría ser buena idea agregar un pequeño esquema donde se explique el problema de control que se busca resolver, destacando dónde operaría el modelo y justificando porque es relevante que sea un modelo liviano. 
+\color{black}
+
+
+
+
 % =========================================================================
 % 2. MATERIALS AND METHODS
 % =========================================================================
 \section{Materials and Methods}
 
+
+\color{red} Sugiero incorporar esta explicación como un caso de estudio, acá se debería explicar solo la metodología completa, incluyendo, procesamiento de descriptoes, la optimización de la arquitectura, y la parte final de la predicción.  \color{black}
 \subsection{Dataset Characterization and Preprocessing}
 
 \subsubsection{NASA C-MAPSS Turbofan Degradation Dataset}
@@ -86,6 +101,8 @@ This study uses the NASA Commercial Modular Aero-Propulsion System Simulation (C
 \end{table}
 
 \subsubsection{Feature Selection and Per-Unit Normalization}
+\color{red} Recomiendo visualizar las features, esto también como caso de estudio.  \color{black}
+
 The implementation follows a pragmatic preprocessing strategy to remove channels with limited prognostic value. First, the three operational setting columns are excluded. Next, a fixed set of low-variance sensor channels is discarded (as implemented in the provided code by dropping the corresponding columns), resulting in a compact feature set of 10 sensors retained for modeling. Concretely, the retained channels correspond to Sensors $\{2,6,7,8,11,13,14,19,20,21\}$ under the standard C-MAPSS column mapping.
 
 Because channels exhibit heterogeneous units and magnitudes, Min--Max normalization is applied \emph{per engine unit} to avoid scale dominance and to mitigate unit-to-unit offsets. For unit $i$ at cycle $c$, with feature vector $\mathbf{x}_{i,c}\in\mathbb{R}^{d}$, the normalized vector is
@@ -96,6 +113,8 @@ Because channels exhibit heterogeneous units and magnitudes, Min--Max normalizat
 where $\min(\mathbf{X}_i)$ and $\max(\mathbf{X}_i)$ are taken over the full life trajectory of unit $i$ for each feature dimension (implemented via \texttt{MinMaxScaler} fit on each unit).
 
 \subsubsection{Piecewise-Linear RUL Target Definition}
+\color{red} Disculpen, pero no entiendo muy bien esta sección, sugiero explicar en mayor profundidad e incorporar visualizaciones. \color{black}
+
 For training trajectories, the ground-truth RUL is computed from the final observed cycle of each unit. Let $C_i^{\max}$ denote the maximum cycle index for unit $i$. The uncapped RUL at cycle $c$ is $C_i^{\max}-c$. Following the piecewise-linear (PWL) convention used in the C-MAPSS literature, the target is capped at a saturation threshold $R_{\max}$ to reduce the influence of the early ``healthy'' phase:
 \begin{equation}
     y_{i,c} = \min\left(C_i^{\max}-c,\; R_{\max}\right).
@@ -111,9 +130,13 @@ To capture temporal information without recurrent cells, a time-delay embedding 
 %=========================================================================
 % 3. RESULTS AND DIAGNOSTICS
 % =========================================================================
+\color{red} A la metodología le falta bastante trabajo, es acá donde se presentará la novedad del paper, sugiero darle prioridad \color{black}
+
 \section{Results and Diagnostics}
 
 This section details the quantitative performance of the proposed Particle Swarm Optimization (PSO)-tuned Multi-Layer Perceptron (MLP) across the four sub-datasets of the NASA C-MAPSS benchmark. The evaluation considers three critical dimensions: predictive accuracy (MSE/MAE), computational efficiency (training latency), and control robustness (FOPID optimization).
+
+\color{red} Los acrónimos se deberían definir solo una vez, dado que es un paper experimentar probablemente se pida comparar cada etapa con algún baseline, por ejemplo, comparar la selección de hiperparámetros con grid search cross validation o con Bayesian Optimization. Ahí se podría evaluar tiempo computacional y métricas de rendimiento. Por otra parte, se debería comparar la performance del modelo final con alguna red más grande o con Random Forest. Por último la fase final de predicción también se debería comparar con el control con PSO. \color{black}
 
 \subsection{Prognostic Performance Evaluation}
 
