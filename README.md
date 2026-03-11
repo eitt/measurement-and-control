@@ -63,3 +63,34 @@ python main_universal.py
 
 ## Reference
 A. Saxena, K. Goebel, D. Simon, and N. Eklund, “Damage Propagation Modeling for Aircraft Engine Run-to-Failure Simulation”, in the Proceedings of the 1st International Conference on Prognostics and Health Management (PHM08), Denver CO, Oct 2008.
+
+## Organized Layout (New)
+- `src/measurement_control/`: reusable pipeline code.
+- `scripts/`: runnable entrypoint scripts.
+- `docs/`: project documentation and organization notes.
+- `outputs/`: generated artifacts from newer pipelines.
+
+Detailed structure notes are available in `docs/PROJECT_STRUCTURE.md`.
+
+## PyTorch Version (New)
+A new fully commented PyTorch implementation is available:
+- Module: `src/measurement_control/torch_rul_pso.py`
+- Entrypoint: `scripts/run_torch_pipeline.py`
+
+This version keeps:
+- two hidden layers (same ANN concept as `code.py`)
+- PSO metaheuristic search style from `code.py`
+- notebook-style optimization defaults:
+  - hidden layer bounds: `(10, 100)`
+  - PSO: `n_particles=5`, `n_iter=5`
+  - training iterations: `epochs=1000`
+
+### Run the PyTorch pipeline
+```bash
+python scripts/run_torch_pipeline.py --data-root data/CMAPSSData
+```
+
+### Optional runtime controls
+```bash
+python scripts/run_torch_pipeline.py --data-root data/CMAPSSData --epochs 300 --n-particles 5 --n-iter 5
+```

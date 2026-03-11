@@ -1,0 +1,11 @@
+citation_key,topic_cluster,method_type,optimization_strategy,dataset,strengths,limitations,relevance_to_current_paper
+Lei2018Machinery,RUL_ML_classical,Machine Learning Survey,None,Various,Comprehensive review of ML shift,Lacks focus on specific HPO strategies,Establishes transition from classical to data-driven ML in RUL
+Wu2018Remaining,RUL_DL_recurrent,LSTM Neural Networks,None,C-MAPSS,Captures sequential dependencies naturally,High computational cost,Highlights why recurrent networks dominated baseline benchmarks
+Mo2021Remaining,RUL_DL_attention_transformer,Transformer Self-Attention,None,C-MAPSS,Handles long-term dependencies without vanishing gradients,Requires extensive hyperparameters tuning,Contrasts our lightweight MLP-based approach
+Peringal2024,RUL_DL_recurrent,LSTM,None,C-MAPSS,Demonstrates superiority over classical MLPs in raw accuracy,Ignores computational constraints,Used as a foundational recurrent baseline
+Elsherif2025,RUL_DL_attention_transformer,CAELSTM,None,C-MAPSS,Extracts spatial and temporal features effectively,Heavy architecture requiring GPU,Represents the complexity limit we argue against
+Chen2024,RUL_DL_attention_transformer,Transformer,None,C-MAPSS,Position-sensitive attention for RUL,Heuristic ad hoc parameter tuning,Shows gap in automated architecture selection
+Yang2020Hyperparameter,HPO_grid_search_cv,General ML,Grid Search & Random Search + CV,Various,Systematic review of HPO including Cross-Validation protocols,Doesn't focus natively on control loops,Provides theoretical basis for HPO review in introduction
+Snoek2012Practical,HPO_bayesian_optimization,Bayesian Optimization,Bayesian Optimization,Various,Efficient exploration of hyperparameter space,Computationally heavy for continuous high-dim spaces,Seminal BO paper serving as comparison for PSO
+Xue2025,HPO_bayesian_optimization,Transformer-LSTM,Bayesian Optimization,C-MAPSS,Automates architecture search,Limited to deep predictive models not control loops,Illustrates current state of automated architecture search
+Gong2023,Control,FOPID,None,Simulated,Enhances robustness under nonlinear conditions,Requires rigorous tuning of non-integer orders,Foundation for the control part of our proposed method
