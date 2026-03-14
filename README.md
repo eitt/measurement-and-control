@@ -32,7 +32,7 @@ This project implements a comprehensive framework for **Remaining Useful Life (R
 ## Usage###1. PrerequisitesEnsure you have the required Python libraries installed:
 
 ```bash
-pip install numpy pandas matplotlib seaborn scikit-learn joblib
+pip install -r requirements.txt
 
 ```
 
@@ -88,6 +88,13 @@ This version keeps:
 ### Run the PyTorch pipeline
 ```bash
 python scripts/run_torch_pipeline.py --data-root data/CMAPSSData
+```
+
+`scripts/run_torch_pipeline.py` now auto-runs `pip install -r requirements.txt` before starting, so the major pipeline can bootstrap dependencies in one command.
+
+If your environment is already provisioned and you want to skip the install preflight:
+```bash
+python scripts/run_torch_pipeline.py --skip-install --data-root data/CMAPSSData
 ```
 
 ### Optional runtime controls

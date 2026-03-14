@@ -554,19 +554,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--epochs",
         type=int,
-        default=1000,
+        default=10,
         help="Number of training epochs per model fit (notebook-style default: 1000).",
     )
     parser.add_argument(
         "--n-particles",
         type=int,
-        default=5,
+        default=10,
         help="PSO swarm size (notebook-style default: 5).",
     )
     parser.add_argument(
         "--n-iter",
         type=int,
-        default=5,
+        default=10,
         help="Number of PSO iterations (notebook-style default: 5).",
     )
     parser.add_argument(
@@ -578,7 +578,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--seed",
         type=int,
-        default=42,
+        default=1952,
         help="Global random seed.",
     )
     parser.add_argument(
