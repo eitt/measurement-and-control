@@ -89,6 +89,13 @@ The workflow is intentionally split into two stages:
 3. **Final evaluation**
    - The official CMAPSS test split is evaluated only once for the final selected model.
 
+### Split Protocol
+- The official NASA benchmark split is preserved: `train_FD00x.txt` is used for model development and `test_FD00x.txt` plus `RUL_FD00x.txt` are used only for the final benchmark evaluation.
+- Inside the official training split, the reusable PyTorch pipeline creates an internal validation partition at the **engine-unit level**, not at the rolling-window level.
+- This means all windows from one engine stay together in either the search/train portion or the validation portion, which avoids leakage between highly overlapping windows from the same trajectory.
+- After Stage 1 screening and Stage 2 retuning, the selected model is retrained on the full official training split and evaluated once on the official test split.
+- This protocol is intended to stay comparable with papers that report results on the official C-MAPSS test split while still keeping a clean validation set for architecture search and tuning.
+
 ### Run the full experiment
 ```bash
 python scripts/run_torch_pipeline.py --skip-install --data-root data/CMAPSSData

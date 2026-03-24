@@ -6,6 +6,8 @@ Two-stage CMAPSS RUL pipeline:
 - Stage 1 uses PSO as a low-cost ANN structure screening method.
 - Stage 2 fully retunes only the top-k Stage 1 structures.
 - The official test split is evaluated only once for the final selected model.
+- The official train_FD00x.txt and test_FD00x.txt files remain separate
+  benchmark partitions throughout; they are never merged into one dataset.
 """
 
 from __future__ import annotations
@@ -138,6 +140,8 @@ class TrainingConfig:
         self.tuning_activation_choices = tuple(self.tuning_activation_choices)
         if not self.tuning_activation_choices:
             self.tuning_activation_choices = self.activation_choices
+        if not 0 < self.validation_size < 1:
+            raise ValueError("validation_size must be between 0 and 1.")
         if self.min_hidden_layers > self.max_hidden_layers:
             raise ValueError("min_hidden_layers must be <= max_hidden_layers.")
         if self.min_neurons > self.max_neurons:
@@ -269,6 +273,9 @@ class TrainSplitBundle:
     X_full_train: np.ndarray
     y_full_train: np.ndarray
     input_dim: int
+    train_unit_count: int
+    val_unit_count: int
+    split_method: str = "engine_level_from_official_train"
 
 
 def set_global_seed(seed: int) -> None:
@@ -340,6 +347,7 @@ def build_sequences(
     df: pd.DataFrame,
     rul: pd.Series,
     seq_len: int = 30,
+    unit_ids: Optional[Sequence[int]] = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Build flattened rolling windows for training from the run-to-failure split."""
 
@@ -347,7 +355,8 @@ def build_sequences(
     sequences: List[np.ndarray] = []
     targets: List[float] = []
 
-    for unit in df["col_1"].unique():
+    units = df["col_1"].unique() if unit_ids is None else unit_ids
+    for unit in units:
         unit_df = df[df["col_1"] == unit]
         unit_rul = rul[unit_df.index]
         scaler = MinMaxScaler()
@@ -403,7 +412,13 @@ def prepare_training_split(
     data_root: Path,
     config: TrainingConfig,
 ) -> TrainSplitBundle:
-    """Load and preprocess the official training split and build train/val data."""
+    """
+    Load only the official training split and derive the internal train/val data.
+
+    This function never reads the official NASA test partition. The validation
+    split is created only from train_FD00x.txt, and it is performed at the
+    engine-unit level before rolling windows are constructed.
+    """
 
     train_path = data_root / f"train_{dataset_name}.txt"
     if not train_path.exists():
@@ -412,14 +427,26 @@ def prepare_training_split(
     train_df = load_cmapss(train_path)
     rul = compute_rul(train_df, clip_max=config.clip_max)
     reduced = select_features_by_dataset(train_df, dataset_name)
-    X_full, y_full = build_sequences(reduced, rul, seq_len=config.seq_len)
-    X_train, X_val, y_train, y_val = train_test_split(
-        X_full,
-        y_full,
+    unit_ids = sorted(int(unit) for unit in reduced["col_1"].unique())
+    train_unit_ids, val_unit_ids = train_test_split(
+        unit_ids,
         test_size=config.validation_size,
         random_state=config.random_seed,
         shuffle=True,
     )
+    X_train, y_train = build_sequences(
+        reduced,
+        rul,
+        seq_len=config.seq_len,
+        unit_ids=sorted(train_unit_ids),
+    )
+    X_val, y_val = build_sequences(
+        reduced,
+        rul,
+        seq_len=config.seq_len,
+        unit_ids=sorted(val_unit_ids),
+    )
+    X_full, y_full = build_sequences(reduced, rul, seq_len=config.seq_len)
     return TrainSplitBundle(
         dataset_name=dataset_name,
         X_train=X_train,
@@ -429,6 +456,8 @@ def prepare_training_split(
         X_full_train=X_full,
         y_full_train=y_full,
         input_dim=X_full.shape[1],
+        train_unit_count=len(train_unit_ids),
+        val_unit_count=len(val_unit_ids),
     )
 
 
@@ -437,7 +466,14 @@ def prepare_official_test_split(
     data_root: Path,
     config: TrainingConfig,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Load and preprocess the official test split."""
+    """
+    Load and preprocess only the official benchmark test split.
+
+    The C-MAPSS test files use the same raw feature schema as the training
+    files, but they contain truncated trajectories and rely on the separate
+    RUL_FD00x.txt targets. They are kept fully separate from training and are
+    touched only for the final benchmark evaluation.
+    """
 
     test_path = data_root / f"test_{dataset_name}.txt"
     rul_path = data_root / f"RUL_{dataset_name}.txt"
@@ -1055,7 +1091,9 @@ def run_full_pipeline(
     Run the full two-stage workflow for one dataset.
 
     The official test split is not evaluated until the final candidate has been
-    selected from Stage 2 retuning.
+    selected from Stage 2 retuning. The internal validation split is carved
+    only from the official training partition; the benchmark test partition is
+    never merged back into model development.
     """
 
     if config.verbose:
@@ -1110,7 +1148,8 @@ def run_full_pipeline(
     )
     final_train_time = time.perf_counter() - final_train_start
 
-    # Touch the official test split only after model selection is complete.
+    # Touch the official benchmark test split only after model selection is
+    # complete. This keeps train_FD00x.txt and test_FD00x.txt fully separate.
     X_test, y_test = prepare_official_test_split(dataset_name, data_root, config)
     final_test_metrics = evaluate_model(final_outcome["model"], (X_test, y_test), config.device)
 
@@ -1133,6 +1172,15 @@ def run_full_pipeline(
             "and tuning of only the best candidates."
         ),
         "config": asdict(config),
+        "split_summary": {
+            "split_method": split_bundle.split_method,
+            "official_train_units": int(split_bundle.train_unit_count + split_bundle.val_unit_count),
+            "search_train_units": int(split_bundle.train_unit_count),
+            "validation_units": int(split_bundle.val_unit_count),
+            "search_train_windows": int(len(split_bundle.X_train)),
+            "validation_windows": int(len(split_bundle.X_val)),
+            "full_training_windows": int(len(split_bundle.X_full_train)),
+        },
         "stage1": {
             "best_candidate": {
                 "architecture": architecture_to_string(search_result.best_candidate.architecture),
@@ -1294,7 +1342,7 @@ def parse_args() -> argparse.Namespace:
         "--validation-size",
         type=float,
         default=0.2,
-        help="Validation fraction taken from the official training split.",
+        help="Validation fraction taken from the official training split at the engine-unit level.",
     )
     parser.add_argument("--clip-max", type=int, default=125, help="Training RUL clipping threshold.")
     parser.add_argument("--seed", type=int, default=1952, help="Global random seed.")

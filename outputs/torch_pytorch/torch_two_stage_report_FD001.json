@@ -91,7 +91,7 @@
       216.96677907714843,
       216.96677907714843
     ],
-    "time_seconds": 101.96730739995837
+    "time_seconds": 96.62232419999782
   },
   "stage2": {
     "retuned_candidates": [
@@ -154,7 +154,7 @@
         "repeats": 2
       }
     },
-    "time_seconds": 798.1974710000213
+    "time_seconds": 808.8129540999653
   },
   "final_model": {
     "architecture": "relu:[99, 86]",
@@ -166,9 +166,9 @@
       "repeats": 2
     },
     "final_train_epochs": 100,
-    "final_train_time_seconds": 93.62011860008352,
+    "final_train_time_seconds": 82.0388924999861,
     "official_test_mse": 2621.062744140625,
     "official_test_mae": 44.0032844543457
   },
-  "data_prep_time_seconds": 0.9041826999746263
+  "data_prep_time_seconds": 0.9934485000558197
 }
