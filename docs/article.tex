@@ -77,9 +77,13 @@ Podría ser buena idea agregar un pequeño esquema donde se explique el problema
 % 2. MATERIALS AND METHODS
 % =========================================================================
 \section{Materials and Methods}
+\iffalse
 
 
 \color{red} Sugiero incorporar esta explicación como un caso de estudio, acá se debería explicar solo la metodología completa, incluyendo, procesamiento de descriptoes, la optimización de la arquitectura, y la parte final de la predicción.  \color{black}
+\fi
+\input{article_methodology_updated.tex}
+\iffalse
 \subsection{Dataset Characterization and Preprocessing}
 
 \subsubsection{NASA C-MAPSS Turbofan Degradation Dataset}
@@ -128,6 +132,7 @@ To capture temporal information without recurrent cells, a time-delay embedding 
 
 
 +78-*1/
+\fi
 %=========================================================================
 % 3. RESULTS AND DIAGNOSTICS
 % =========================================================================

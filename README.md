@@ -72,32 +72,54 @@ A. Saxena, K. Goebel, D. Simon, and N. Eklund, “Damage Propagation Modeling fo
 
 Detailed structure notes are available in `docs/PROJECT_STRUCTURE.md`.
 
-## PyTorch Version (New)
-A new fully commented PyTorch implementation is available:
+## PyTorch Two-Stage Workflow
+The reusable ANN + PSO pipeline now lives in:
 - Module: `src/measurement_control/torch_rul_pso.py`
 - Entrypoint: `scripts/run_torch_pipeline.py`
 
-This version keeps:
-- two hidden layers (same ANN concept as `code.py`)
-- PSO metaheuristic search style from `code.py`
-- notebook-style optimization defaults:
-  - hidden layer bounds: `(10, 100)`
-  - PSO: `n_particles=5`, `n_iter=5`
-  - training iterations: `epochs=1000`
+The workflow is intentionally split into two stages:
+1. **Stage 1: low-fidelity PSO screening**
+   - PSO searches ANN structure under a small common training budget.
+   - Candidates are ranked by `validation_mse + lambda_complexity * complexity_penalty`.
+   - This stage is for reducing the architecture search space, not for claiming a final global optimum.
+2. **Stage 2: selective retuning**
+   - Only the top-k Stage 1 structures are retrained with a larger budget.
+   - Learning rate, batch size, weight decay, and activation can be tuned here.
+   - The final model is selected from these retuned candidates.
+3. **Final evaluation**
+   - The official CMAPSS test split is evaluated only once for the final selected model.
 
-### Run the PyTorch pipeline
-```bash
-python scripts/run_torch_pipeline.py --data-root data/CMAPSSData
-```
-
-`scripts/run_torch_pipeline.py` now auto-runs `pip install -r requirements.txt` before starting, so the major pipeline can bootstrap dependencies in one command.
-
-If your environment is already provisioned and you want to skip the install preflight:
+### Run the full experiment
 ```bash
 python scripts/run_torch_pipeline.py --skip-install --data-root data/CMAPSSData
 ```
 
-### Optional runtime controls
+If you want the wrapper to bootstrap dependencies first:
 ```bash
-python scripts/run_torch_pipeline.py --data-root data/CMAPSSData --epochs 300 --n-particles 5 --n-iter 5
+python scripts/run_torch_pipeline.py --data-root data/CMAPSSData
 ```
+
+### Example reproducible screening + retuning run
+```bash
+python scripts/run_torch_pipeline.py --skip-install --data-root data/CMAPSSData --datasets FD001 --n-particles 5 --n-iter 5 --low-fidelity-epochs 15 --top-k 3 --full-tuning-epochs 100 --final-train-epochs 100 --complexity-penalty-weight 0.1
+```
+
+### Useful controls
+- `--min-hidden-layers` / `--max-hidden-layers`
+- `--min-neurons` / `--max-neurons`
+- `--activation-choices`
+- `--n-particles` / `--n-iter` / `--pso-inertia` / `--pso-c1` / `--pso-c2`
+- `--low-fidelity-epochs` / `--low-fidelity-patience`
+- `--top-k`
+- `--full-tuning-epochs` / `--full-tuning-patience`
+- `--final-train-epochs`
+- `--tuning-learning-rates` / `--tuning-batch-sizes` / `--tuning-weight-decays`
+- `--complexity-penalty-weight`
+- `--seed`
+
+### Outputs
+Each dataset run writes:
+- `outputs/torch_pytorch/torch_rul_summary.csv`
+- `outputs/torch_pytorch/torch_two_stage_report_<DATASET>.json`
+- `outputs/torch_pytorch/fig_torch_mlp_convergence_<DATASET>.png`
+- `outputs/torch_pytorch/fig_torch_rul_prediction_<DATASET>.png`

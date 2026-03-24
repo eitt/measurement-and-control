@@ -7,11 +7,13 @@ This package currently exposes the PyTorch RUL + PSO pipeline.
 from .torch_rul_pso import (
     TrainingConfig,
     process_dataset,
+    run_full_pipeline,
     run_all_datasets,
 )
 
 __all__ = [
     "TrainingConfig",
     "process_dataset",
+    "run_full_pipeline",
     "run_all_datasets",
 ]

@@ -9,6 +9,7 @@ Features:
 - Includes Robust FOPID Control optimization.
 """
 
+# Import necessary libraries
 import numpy as np
 import pandas as pd
 import time
@@ -25,14 +26,19 @@ from typing import Tuple, List, Dict
 import warnings
 
 # --- CONFIGURATION ---
+# Suppress warnings for cleaner output
 warnings.filterwarnings("ignore")
+# Set the visual theme for plots
 sns.set_theme(style="whitegrid")
+# Update default font size and DPI for plots
 plt.rcParams.update({'font.size': 11, 'figure.dpi': 300})
 
+# Define the list of datasets to be analyzed
 DATASETS = ['FD001', 'FD002', 'FD003', 'FD004']
-# DATASETS = ['FD004'] # Descomentar para probar solo uno rápido
+# DATASETS = ['FD004'] # Uncomment to test with a single dataset quickly
 
 # --- FIX: Updated path to match your folder structure ---
+# Define the directory where the data is located
 DATA_DIR = os.path.join("data", "CMAPSSData") 
 # --------------------------------------------------------
 
@@ -41,38 +47,67 @@ DATA_DIR = os.path.join("data", "CMAPSSData")
 # ==========================================
 
 def load_data(dataset_name):
-    # This now looks in data/CMAPSSData/train_FD00x.txt
+    """
+    Loads a single dataset file.
+    It now looks in data/CMAPSSData/train_FD00x.txt.
+    """
     path = os.path.join(DATA_DIR, f"train_{dataset_name}.txt")
     if not os.path.exists(path):
         print(f"[WARN] File not found: {path}. Skipping...")
         return None
+    # Define column names for the dataset
     col_names = [f"col_{i}" for i in range(1, 27)]
+    # Read the data from the text file
     return pd.read_csv(path, sep=r"\s+", header=None, names=col_names)
 
 def process_data(df, clip_max=125, seq_len=30):
+    """
+    Processes the raw data by calculating RUL, selecting features,
+    and building sequences for the model.
+    """
     # RUL Calculation
+    # Group by engine unit and find the maximum cycle
     grouped = df.groupby('col_1')['col_2'].max()
     max_cycle = df['col_1'].map(grouped)
+    # Calculate RUL and clip it at a maximum value
     rul = (max_cycle - df['col_2']).clip(upper=clip_max)
     
-    # Feature Selection (Dropping non-informative/settings)
-    # Nota: Para FD002/004 a veces las settings son utiles, pero mantendremos
-    # la consistencia eliminandolas para comparar arquitecturas puras.
-    cols_to_drop = ['col_3', 'col_4', 'col_5', 'col_6', 'col_8', 'col_9',
-                    'col_10', 'col_14', 'col_15', 'col_17', 'col_20',
-                    'col_21', 'col_22', 'col_23']
+    # Feature Selection (fixed literature-derived baseline)
+    # DATA_CARD.md documents the raw C-MAPSS schema:
+    # - col_3..col_5 are the 3 operational settings.
+    # - col_6..col_26 are the 21 sensor channels.
+    #
+    # docs/article.tex defines the universal baseline used here as:
+    # 1. drop the 3 operational settings, and
+    # 2. keep only Sensors {2, 6, 7, 8, 11, 13, 14, 19, 20, 21}.
+    #
+    # Under the col_1..col_26 naming in this script, the retained sensor set is
+    # {col_7, col_11, col_12, col_13, col_16, col_18, col_19, col_24, col_25,
+    #  col_26}, so every other sensor column is dropped here.
+    #
+    # This is a fixed comparability choice, not a claim that every dropped
+    # channel is low-variance in every subset. The DATA_CARD shows several
+    # dropped channels are constant or near-constant in FD001/FD003, while
+    # FD002/FD004 have informative operating settings; the dataset-aware
+    # pipeline keeps col_3..col_5 for those multi-regime subsets.
+    cols_to_drop = [
+        'col_3', 'col_4', 'col_5',  # operational_setting_1..3
+        'col_6', 'col_8', 'col_9', 'col_10', 'col_14', 'col_15',
+        'col_17', 'col_20', 'col_21', 'col_22', 'col_23'
+    ]
     existing_drop = [c for c in cols_to_drop if c in df.columns]
     df_clean = df.drop(columns=existing_drop)
     
     # Sequence Building
     feature_cols = df_clean.columns[2:]
     scaler = MinMaxScaler()
-    # Fit scaling on whole dataset for simplicity in this loop
+    # Fit scaling on the whole dataset for simplicity
     scaled_data = scaler.fit_transform(df_clean[feature_cols])
     df_scaled = pd.DataFrame(scaled_data, columns=feature_cols)
     df_scaled['id'] = df['col_1'].values
     
     sequences, targets = [], []
+    # Create sequences for each engine unit
     for unit in df_scaled['id'].unique():
         unit_df = df_scaled[df_scaled['id'] == unit].drop(columns=['id'])
         unit_rul = rul[df['col_1'] == unit]
@@ -88,24 +123,32 @@ def process_data(df, clip_max=125, seq_len=30):
 
 # --- PSO FOR MLP ---
 class ParticleMLP:
+    """A particle for Particle Swarm Optimization of the MLP architecture."""
     def __init__(self, dim, bounds):
+        # Initialize position, velocity, and best-known position
         self.position = np.random.uniform(bounds[0], bounds[1], size=dim)
         self.velocity = np.zeros(dim)
         self.best_pos = self.position.copy()
         self.best_score = np.inf
 
 def optimize_mlp_pso(X, y, n_particles=3, n_iter=3):
-    # Reduced particles/iter for speed in demonstration
+    """
+    Optimizes MLP architecture using Particle Swarm Optimization (PSO).
+    Reduced particles/iterations for speed in this demonstration.
+    """
+    # Split data for training and validation
     X_tr, X_val, y_tr, y_val = train_test_split(X, y, test_size=0.2)
-    dim = 2
-    bounds = (10, 100)
+    dim = 2  # Two hidden layers
+    bounds = (10, 100)  # Number of neurons per layer
     
+    # Initialize particles
     particles = [ParticleMLP(dim, bounds) for _ in range(n_particles)]
     g_best_pos = particles[0].position.copy()
     g_best_score = np.inf
     
     start_time = time.time()
     
+    # PSO loop
     for _ in range(n_iter):
         for p in particles:
             hidden = tuple(int(x) for x in p.position)
@@ -113,6 +156,7 @@ def optimize_mlp_pso(X, y, n_particles=3, n_iter=3):
             model.fit(X_tr, y_tr)
             score = mean_squared_error(y_val, model.predict(X_val))
             
+            # Update personal and global bests
             if score < p.best_score:
                 p.best_score = score
                 p.best_pos = p.position.copy()
@@ -120,8 +164,8 @@ def optimize_mlp_pso(X, y, n_particles=3, n_iter=3):
                 g_best_score = score
                 g_best_pos = p.position.copy()
                 
-            # Update (Simple PSO velocity)
-            p.position += np.random.uniform(-1, 1, dim) * 2 # Stochastic drift
+            # Update particle position (simple stochastic drift)
+            p.position += np.random.uniform(-1, 1, dim) * 2 
             p.position = np.clip(p.position, bounds[0], bounds[1])
             
     elapsed = time.time() - start_time
@@ -130,42 +174,49 @@ def optimize_mlp_pso(X, y, n_particles=3, n_iter=3):
 
 # --- ROBUST FOPID ---
 def simulate_fopid(params, duration=10.0, dt=0.01):
+    """
+    Simulates a Fractional-Order PID (FOPID) controller.
+    Calculates the Integral Squared Error (ISE) for a step response.
+    """
     Kp, Ki, Kd, lam, mu = params
     x1, x2, integ, deriv_prev, ise = 0.0, 0.0, 0.0, 0.0, 0.0
     for _ in range(int(duration/dt)):
         error = 1.0 - x1
+        # Fractional integral term
         term_i = error * dt
         integ += np.sign(term_i) * (np.abs(term_i) ** lam)
+        # Fractional derivative term
         term_d = (error - deriv_prev) / dt
         deriv = np.sign(term_d) * (np.abs(term_d) ** mu)
         deriv_prev = error
         
         u = Kp*error + Ki*integ + Kd*deriv
-        if np.abs(u) > 1e6 or np.isnan(u): return 1e9
+        if np.abs(u) > 1e6 or np.isnan(u): return 1e9 # Penalize instability
         
+        # System dynamics simulation
         x2 += (u - x1 - x2) * dt
         x1 += x2 * dt
         ise += (error**2)*dt
     return ise
 
 def optimize_fopid_pso():
-    # Optimizes once to demonstrate capability
+    """Optimizes FOPID parameters using PSO (once to demonstrate capability)."""
     start_time = time.time()
-    dim = 5
+    dim = 5  # Kp, Ki, Kd, lambda, mu
     bounds = [(0, 5), (0, 2), (0, 2), (0.1, 1.9), (0.1, 1.9)]
     particles = np.random.uniform([b[0] for b in bounds], [b[1] for b in bounds], (10, dim))
     best_global = particles[0]
     best_score = simulate_fopid(best_global)
     
     history = []
-    for _ in range(10): # 10 iters
+    for _ in range(10): # 10 iterations
         scores = np.array([simulate_fopid(p) for p in particles])
         min_idx = np.argmin(scores)
         if scores[min_idx] < best_score:
             best_score = scores[min_idx]
             best_global = particles[min_idx].copy()
         history.append(best_score)
-        # Simple random update for demo
+        # Simple random update for demonstration
         particles += np.random.normal(0, 0.1, particles.shape)
         for i, b in enumerate(bounds): particles[:, i] = np.clip(particles[:, i], b[0], b[1])
         
@@ -177,7 +228,7 @@ def optimize_fopid_pso():
 # ==========================================
 
 def plot_fopid_results(history, best_params):
-    # Convergence
+    """Plots the convergence of the FOPID optimization."""
     plt.figure(figsize=(6, 4))
     plt.plot(history, 'b-o')
     plt.title('FOPID Optimization Convergence')
@@ -188,6 +239,7 @@ def plot_fopid_results(history, best_params):
     plt.close()
 
 def plot_computational_time(results_df):
+    """Plots the total computational time for each dataset."""
     plt.figure(figsize=(8, 5))
     sns.barplot(data=results_df, x='Dataset', y='Time_Total', palette='magma')
     plt.title('Computational Cost by Dataset (PSO + Training)')
@@ -254,6 +306,7 @@ def generate_dashboard(results_df):
 # ==========================================
 
 def main():
+    """Main function to run the entire analysis pipeline."""
     print("="*60)
     print("   UNIVERSAL CMAPSS ANALYZER (FD001 - FD004)")
     print("="*60)
@@ -264,32 +317,34 @@ def main():
     for ds_name in DATASETS:
         print(f"\n>> Processing {ds_name}...")
         
-        # 1. Load & Process
+        # 1. Load & Process data
         df = load_data(ds_name)
         if df is None: continue
         
         X, y = process_data(df)
         print(f"   Samples: {X.shape[0]}, Features: {X.shape[1]}")
         
-        # Split for final evaluation
+        # Split data for final evaluation
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
         
-        # 2. Optimization (PSO)
+        # 2. Optimization (PSO) for MLP architecture
         print("   Running PSO for Architecture Search...")
-        best_arch, time_pso = optimize_mlp_pso(X_train[:2000], y_train[:2000]) # Subset for speed
+        # Use a subset of data for faster optimization
+        best_arch, time_pso = optimize_mlp_pso(X_train[:2000], y_train[:2000])
         
-        # 3. Final Training
+        # 3. Final Training of the best model
         print(f"   Training Final Model {best_arch}...")
         start_train = time.time()
         model = MLPRegressor(hidden_layer_sizes=best_arch, max_iter=200, random_state=42)
         model.fit(X_train, y_train)
         time_train = time.time() - start_train
         
-        # 4. Evaluation
+        # 4. Evaluation of the final model
         preds = model.predict(X_test)
         mse = mean_squared_error(y_test, preds)
         mae = mean_absolute_error(y_test, preds)
         
+        # Store results for this dataset
         results_storage.append({
             'Dataset': ds_name,
             'MSE': mse,
@@ -301,7 +356,7 @@ def main():
         })
         print(f"   -> Result: MSE={mse:.2f}, Time={time_pso+time_train:.1f}s")
 
-    # Convert to DataFrame
+    # Convert results to a DataFrame
     results_df = pd.DataFrame(results_storage)
     
     # --- FIX: Guardrail against empty data ---
@@ -334,4 +389,5 @@ def main():
     print("\n[SUCCESS] Generated: 'universal_dashboard.png', 'universal_time_analysis.png', 'universal_fopid_convergence.png'")
 
 if __name__ == '__main__':
+    # Execute the main function when the script is run
     main()

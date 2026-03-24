@@ -1,0 +1,76 @@
+\subsection{Dataset Characterization and Preprocessing}
+
+\subsubsection{NASA C-MAPSS Turbofan Degradation Dataset}
+This study uses the NASA Commercial Modular Aero-Propulsion System Simulation (C-MAPSS) benchmark \cite{Saxena2008}, which provides run-to-failure trajectories for turbofan engines under controlled degradations. Each observation contains a unit identifier, a cycle index, three operational settings, and 21 sensor measurements, for a total of 26 columns. The four standard subsets (FD001--FD004) are retained in order to evaluate the proposed workflow under progressively harder combinations of operating-regime variability and fault diversity.
+
+\begin{table}[h]
+    \centering
+    \caption{Empirical summary of the C-MAPSS subsets used in this study. Train/test engine counts follow the released files; for FD004 the bundled readme swaps the counts, but the actual files contain 249 training engines and 248 test engines.}
+    \label{tab:dataset_stats}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{lcccccc}
+        \toprule
+        \textbf{Dataset} & \textbf{Op. Conditions} & \textbf{Fault Modes} & \textbf{Train/Test Engines} & \textbf{Train Cycles per Engine} & \textbf{Test Cycles per Engine} & \textbf{Official Test RUL} \\
+        \midrule
+        \textbf{FD001} & 1 & 1 & 100 / 100 & $206.31 \pm 46.34$ & $130.96 \pm 53.59$ & $75.52 \pm 41.76$ \\
+        \textbf{FD002} & 6 & 1 & 260 / 259 & $206.77 \pm 46.78$ & $131.24 \pm 63.09$ & $81.19 \pm 53.88$ \\
+        \textbf{FD003} & 1 & 2 & 100 / 100 & $247.20 \pm 86.48$ & $165.96 \pm 86.89$ & $75.32 \pm 41.60$ \\
+        \textbf{FD004} & 6 & 2 & 249 / 248 & $245.98 \pm 73.11$ & $166.19 \pm 91.61$ & $86.55 \pm 54.63$ \\
+        \bottomrule
+    \end{tabular}}
+\end{table}
+
+These descriptive statistics confirm the benchmark taxonomy. FD001 and FD003 correspond to single-regime subsets, whereas FD002 and FD004 contain six operating conditions. The column-level audit of the released files makes this distinction explicit: the operational-setting columns have near-zero spread in FD001 and FD003, but wide variation in FD002 and FD004, with standard deviations of approximately 14.75 for \texttt{col\_3}, 0.31 for \texttt{col\_4}, and 14.25 for \texttt{col\_5}. The two-fault subsets (FD003 and FD004) also exhibit longer and more variable degradation histories, with mean training lengths near 246--247 cycles, compared with approximately 206 cycles for FD001 and FD002.
+
+\subsubsection{Feature Selection, Regime Handling, and Per-Unit Normalization}
+The preprocessing pipeline follows the raw C-MAPSS schema documented in the dataset audit. Columns \texttt{col\_1} and \texttt{col\_2} correspond to the unit identifier and cycle counter, respectively, and are not used as direct predictors. Columns \texttt{col\_3}--\texttt{col\_5} are the three operational settings, while columns \texttt{col\_6}--\texttt{col\_26} map to sensor measurements 1--21.
+
+A compact sensor subset is retained in order to keep the ANN lightweight enough for repeated screening inside the optimization loop. Following the literature-derived 10-sensor baseline reviewed in this study, Sensors $\{2,6,7,8,11,13,14,19,20,21\}$ are preserved and Sensors $\{1,3,4,5,9,10,12,15,16,17,18\}$ are removed. Under the code naming convention, this fixed sensor filter corresponds to dropping \texttt{col\_6}, \texttt{col\_8}, \texttt{col\_9}, \texttt{col\_10}, \texttt{col\_14}, \texttt{col\_15}, \texttt{col\_17}, \texttt{col\_20}, \texttt{col\_21}, \texttt{col\_22}, and \texttt{col\_23}. The descriptive statistics partially support this decision: in FD001 and FD003, \texttt{col\_6}, \texttt{col\_10}, \texttt{col\_21}, and \texttt{col\_23} are constant, and \texttt{col\_15} is constant or nearly constant. However, several of these channels vary more strongly in FD002 and FD004, so this fixed sensor filter should be interpreted as a conservative, literature-aligned baseline rather than a universal claim that every removed channel is non-informative in all subsets.
+
+The treatment of the operational settings is deliberately dataset-aware. In FD001 and FD003, the settings are dropped because their empirical spread is effectively zero and they add little information beyond noise. In FD002 and FD004, the same variables are retained because they encode the six operating regimes that materially affect engine behavior. This choice aligns the implementation with both the descriptive statistics of the local files and the benchmark definition reported by NASA.
+
+After feature selection, Min--Max normalization is applied independently to each engine trajectory in order to reduce scale dominance among heterogeneous sensors. For unit $i$ at cycle $c$, with retained feature vector $\mathbf{x}_{i,c}\in\mathbb{R}^{d}$, the normalized vector is
+\begin{equation}
+    \tilde{\mathbf{x}}_{i,c}=\frac{\mathbf{x}_{i,c}-\min(\mathbf{X}_i)}{\max(\mathbf{X}_i)-\min(\mathbf{X}_i)},
+    \label{eq:normalization}
+\end{equation}
+where $\min(\mathbf{X}_i)$ and $\max(\mathbf{X}_i)$ are computed feature-wise over the available trajectory of unit $i$. The same per-unit transformation is used for both the training split and the official test split.
+
+\subsubsection{Piecewise-Linear RUL Target Definition}
+For the run-to-failure training trajectories, the target Remaining Useful Life is computed from the last observed cycle of each engine. Let $C_i^{\max}$ denote the final cycle of unit $i$. The uncapped RUL at cycle $c$ is $C_i^{\max}-c$. Following the standard piecewise-linear convention in the C-MAPSS literature, the target is saturated at a maximum threshold $R_{\max}$ in order to reduce the influence of the long healthy phase:
+\begin{equation}
+    y_{i,c} = \min\left(C_i^{\max}-c,\; R_{\max}\right).
+    \label{eq:rul_cap}
+\end{equation}
+In the implementation, $R_{\max}=125$ cycles. For the official test split, the benchmark-provided RUL labels are used only after model selection is complete.
+
+\subsubsection{Sliding-Window Construction and Flattened Temporal Embeddings}
+To encode short-term degradation dynamics without recurrent layers, each engine trajectory is transformed into overlapping fixed-length windows. With a window length $L=30$ and $d$ retained variables after feature filtering, the input associated with unit $i$ and cycle $t$ is
+\begin{equation}
+    \mathbf{s}_{i,t}=
+    \left[
+    \tilde{\mathbf{x}}_{i,t-L+1}^{\top},
+    \tilde{\mathbf{x}}_{i,t-L+2}^{\top},
+    \ldots,
+    \tilde{\mathbf{x}}_{i,t}^{\top}
+    \right]^{\top}\in\mathbb{R}^{Ld},
+    \label{eq:window_embedding}
+\end{equation}
+and its target is the capped RUL value at the final cycle of the window. All admissible rolling windows are used for model development. For the official test split, a single sample is constructed per engine from the last available window. If a test trajectory is shorter than $L$, the first normalized observation is repeated on the left so that every engine yields one fixed-size input vector.
+
+\subsubsection{Two-Stage ANN Screening, Selective Retuning, and Final Evaluation}
+The prognostic model is a fully connected feed-forward regressor with configurable depth, width, and activation function. The implementation keeps these choices in a single parameter block so that the full experiment can be reproduced from one configuration. In the reference settings, the architecture search is restricted to one or two hidden layers with 10--100 neurons per layer, and training uses the Adam optimizer with mean squared error as the loss.
+
+The optimization workflow is explicitly divided into two stages. In Stage 1, PSO is used only as a low-cost structural screening mechanism. The official training trajectories are first converted into windowed samples and then split into training and validation partitions using a fixed random seed. Each particle is decoded into a discrete ANN architecture by rounding and clipping the continuous position vector to the configured bounds. Candidate models are trained under a common reduced budget (15 epochs by default, with early stopping patience of 5 epochs), and their low-fidelity objective is defined as
+\begin{equation}
+    J_{\mathrm{LF}} = \mathrm{MSE}_{\mathrm{val}} + \lambda_{\mathrm{comp}}\,P_{\mathrm{comp}},
+    \label{eq:low_fidelity_objective}
+\end{equation}
+with
+\begin{equation}
+    P_{\mathrm{comp}} = N_{\mathrm{layers}} + \frac{N_{\mathrm{params}}}{1000}.
+    \label{eq:complexity_penalty}
+\end{equation}
+Here, $\mathrm{MSE}_{\mathrm{val}}$ is the validation mean squared error, $N_{\mathrm{layers}}$ is the number of hidden layers, and $N_{\mathrm{params}}$ is the number of trainable parameters. The complexity term discourages larger architectures unless they deliver meaningful validation gains. The default PSO configuration is inertia-based, with 5 particles, 5 iterations, inertia $w=0.5$, and acceleration coefficients $c_1=c_2=1.5$. Invalid candidates are logged and assigned infinite cost rather than interrupting the search. Under this design, PSO is not used to claim final global optimality; instead, it serves to reduce the structural search space at low computational cost.
+
+In Stage 2, only the top-$k$ Stage 1 structures (3 by default) are retrained with a larger budget and a small tuning grid over learning rate, batch size, weight decay, and, if enabled, activation function. This second stage uses a longer training horizon (100 epochs by default, with patience 15) and may repeat each shortlisted configuration across multiple seeds to stabilize selection, while avoiding the cost of exhaustively tuning every architecture visited by the swarm. The same complexity-aware score is used to rank the retuned candidates. Finally, the selected ANN is retrained on the full official training split and evaluated once on the official test split. This sequencing prevents information leakage from the test set into architecture search and makes the methodological claim explicit: PSO is used as a computationally efficient first-stage filter, whereas final model selection is based on selective retraining and tuning of only the most promising ANN structures.

@@ -1,0 +1,174 @@
+{
+  "dataset_name": "FD001",
+  "rationale": "PSO is used as a computationally efficient first-stage search to identify promising ANN structures under a common low-cost training budget; final model selection is based on a second-stage retraining and tuning of only the best candidates.",
+  "config": {
+    "seq_len": 30,
+    "validation_size": 0.2,
+    "clip_max": 125,
+    "random_seed": 1952,
+    "min_hidden_layers": 1,
+    "max_hidden_layers": 2,
+    "min_neurons": 10,
+    "max_neurons": 100,
+    "activation_choices": [
+      "relu"
+    ],
+    "search_activation": false,
+    "batch_size": 128,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0,
+    "low_fidelity_epochs": 15,
+    "low_fidelity_patience": 5,
+    "top_k": 3,
+    "full_tuning_epochs": 100,
+    "full_tuning_patience": 15,
+    "retune_repeats": 2,
+    "tuning_learning_rates": [
+      0.001,
+      0.0005
+    ],
+    "tuning_batch_sizes": [
+      128
+    ],
+    "tuning_weight_decays": [
+      0.0
+    ],
+    "tuning_activation_choices": [
+      "relu"
+    ],
+    "final_train_epochs": 100,
+    "n_particles": 5,
+    "n_iter": 5,
+    "inertia": 0.5,
+    "c1": 1.5,
+    "c2": 1.5,
+    "complexity_penalty_weight": 0.1,
+    "device": "cpu",
+    "output_dir": "outputs/torch_pytorch",
+    "verbose": true
+  },
+  "stage1": {
+    "best_candidate": {
+      "architecture": "relu:[100, 100]",
+      "low_fidelity_score": 216.96677907714843,
+      "validation_mse": 212.73667907714844,
+      "validation_mae": 10.945516586303711,
+      "complexity_penalty": 42.301,
+      "num_parameters": 40301
+    },
+    "top_candidates": [
+      {
+        "architecture": "relu:[100, 100]",
+        "low_fidelity_score": 216.96677907714843,
+        "validation_mse": 212.73667907714844,
+        "validation_mae": 10.945516586303711,
+        "complexity_penalty": 42.301,
+        "num_parameters": 40301
+      },
+      {
+        "architecture": "relu:[99, 86]",
+        "low_fidelity_score": 225.59892348632812,
+        "validation_mse": 221.55032348632812,
+        "validation_mae": 11.386094093322754,
+        "complexity_penalty": 40.486,
+        "num_parameters": 38486
+      },
+      {
+        "architecture": "relu:[99, 89]",
+        "low_fidelity_score": 226.61205734863282,
+        "validation_mse": 222.5331573486328,
+        "validation_mae": 11.397076606750488,
+        "complexity_penalty": 40.789,
+        "num_parameters": 38789
+      }
+    ],
+    "evaluated_candidates": 11,
+    "invalid_candidates": [],
+    "history": [
+      228.83791733398436,
+      216.96677907714843,
+      216.96677907714843,
+      216.96677907714843,
+      216.96677907714843
+    ],
+    "time_seconds": 101.96730739995837
+  },
+  "stage2": {
+    "retuned_candidates": [
+      {
+        "architecture": "relu:[99, 86]",
+        "mean_validation_mse": 177.8988800048828,
+        "mean_validation_mae": 9.735398769378662,
+        "selection_score": 181.9474800048828,
+        "complexity_penalty": 40.486,
+        "num_parameters": 38486,
+        "best_tuning": {
+          "learning_rate": 0.001,
+          "batch_size": 128,
+          "weight_decay": 0.0,
+          "activation": "relu",
+          "repeats": 2
+        }
+      },
+      {
+        "architecture": "relu:[100, 100]",
+        "mean_validation_mse": 183.3453598022461,
+        "mean_validation_mae": 9.909290313720703,
+        "selection_score": 187.5754598022461,
+        "complexity_penalty": 42.301,
+        "num_parameters": 40301,
+        "best_tuning": {
+          "learning_rate": 0.001,
+          "batch_size": 128,
+          "weight_decay": 0.0,
+          "activation": "relu",
+          "repeats": 2
+        }
+      },
+      {
+        "architecture": "relu:[99, 89]",
+        "mean_validation_mse": 183.62744903564453,
+        "mean_validation_mae": 9.936981678009033,
+        "selection_score": 187.70634903564454,
+        "complexity_penalty": 40.789,
+        "num_parameters": 38789,
+        "best_tuning": {
+          "learning_rate": 0.001,
+          "batch_size": 128,
+          "weight_decay": 0.0,
+          "activation": "relu",
+          "repeats": 2
+        }
+      }
+    ],
+    "selected_candidate": {
+      "architecture": "relu:[99, 86]",
+      "mean_validation_mse": 177.8988800048828,
+      "mean_validation_mae": 9.735398769378662,
+      "selection_score": 181.9474800048828,
+      "best_tuning": {
+        "learning_rate": 0.001,
+        "batch_size": 128,
+        "weight_decay": 0.0,
+        "activation": "relu",
+        "repeats": 2
+      }
+    },
+    "time_seconds": 798.1974710000213
+  },
+  "final_model": {
+    "architecture": "relu:[99, 86]",
+    "best_tuning": {
+      "learning_rate": 0.001,
+      "batch_size": 128,
+      "weight_decay": 0.0,
+      "activation": "relu",
+      "repeats": 2
+    },
+    "final_train_epochs": 100,
+    "final_train_time_seconds": 93.62011860008352,
+    "official_test_mse": 2621.062744140625,
+    "official_test_mae": 44.0032844543457
+  },
+  "data_prep_time_seconds": 0.9041826999746263
+}
