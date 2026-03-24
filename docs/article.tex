@@ -230,4 +230,171 @@ While thermodynamic regime shifts in FD002 and FD004 introduced higher variance 
 \bibliographystyle{ieeetr}
 \bibliography{rul_hpo_priority_reading,rul_hpo_repository,docs/references}
 
+
+\appendix
+\section{Ideas }
+
+\subsection{MILP to prone NNs}
+\textbf{Sets and indices}
+\begin{align}
+\mathcal{N} &= \{1,\dots,N\} \quad \text{training samples}, \\
+\mathcal{H} &= \{1,\dots,H\} \quad \text{hidden neurons}, \\
+\mathcal{I} &= \{1,\dots,d\} \quad \text{input features}, \\
+\mathcal{O} &= \{1,\dots,m\} \quad \text{output neurons}.
+\end{align}
+
+
+\textbf{Given data}
+
+\begin{align}
+x^n_i &:\ \text{input feature } i \text{ of sample } n, \\
+\hat{y}^n_k &:\ \text{output of the original (reference) neural network for sample } n \text{ and output } k.
+\end{align}
+Let $W^{(1)}_{ji},\; b^{(1)}_j$ be the weights and biases from input to hidden layer, and $W^{(2)}_{kj},\; b^{(2)}_k$ the weights and biases from hidden to output layer of the pruned network before arc deletion. We also define big-\(M\) constants for the ReLU formulation:
+\[
+L^n_j \le a^n_j \le U^n_j,\qquad \forall n\in\mathcal{N},\; j\in\mathcal{H},
+\]
+where \(a^n_j\) is the pre-activation of hidden neuron \(j\) for sample \(n\), and \(L^n_j,U^n_j\) are valid lower and upper bounds.
+
+
+\textbf{Decision variables}
+\[
+z^{(1)}_{ji}\in\{0,1\} \qquad \forall j\in\mathcal{H},\; i\in\mathcal{I},
+\]
+\[
+z^{(2)}_{kj}\in\{0,1\} \qquad \forall k\in\mathcal{O},\; j\in\mathcal{H},
+\]
+where \(z^{(1)}_{ji}=1\) if arc \((i,j)\) is kept, and \(z^{(2)}_{kj}=1\) if arc \((j,k)\) is kept.
+
+For each sample \(n\):
+\[
+a^n_j \in \mathbb{R} \qquad \forall j\in\mathcal{H},
+\]
+\[
+h^n_j \ge 0 \qquad \forall j\in\mathcal{H},
+\]
+\[
+\delta^n_j \in \{0,1\} \qquad \forall j\in\mathcal{H},
+\]
+\[
+y^n_k \in \mathbb{R} \qquad \forall k\in\mathcal{O}.
+\]
+
+\[
+\textbf{Objective}
+\]
+Minimize the quadratic error between the pruned network and the reference network:
+\[
+\min \sum_{n\in\mathcal{N}} \sum_{k\in\mathcal{O}}
+\left(y^n_k-\hat{y}^n_k\right)^2.
+\]
+
+\[
+\textbf{Layer equations}
+\]
+
+Hidden-layer pre-activation:
+\[
+a^n_j = \sum_{i\in\mathcal{I}} W^{(1)}_{ji}\, x^n_i \, z^{(1)}_{ji} + b^{(1)}_j,
+\qquad \forall n\in\mathcal{N},\; j\in\mathcal{H}.
+\]
+
+ReLU activation \(h^n_j=\max\{0,a^n_j\}\), linearized with big-\(M\):
+\[
+h^n_j \ge a^n_j,
+\qquad \forall n\in\mathcal{N},\; j\in\mathcal{H},
+\]
+\[
+h^n_j \ge 0,
+\qquad \forall n\in\mathcal{N},\; j\in\mathcal{H},
+\]
+\[
+h^n_j \le a^n_j - L^n_j(1-\delta^n_j),
+\qquad \forall n\in\mathcal{N},\; j\in\mathcal{H},
+\]
+\[
+h^n_j \le U^n_j \delta^n_j,
+\qquad \forall n\in\mathcal{N},\; j\in\mathcal{H}.
+\]
+
+Output layer:
+\[
+y^n_k = \sum_{j\in\mathcal{H}} W^{(2)}_{kj}\, h^n_j \, z^{(2)}_{kj} + b^{(2)}_k,
+\qquad \forall n\in\mathcal{N},\; k\in\mathcal{O}.
+\]
+
+\[
+\textbf{Pruning budget}
+\]
+
+Let the total number of arcs in the original two-layer network be
+\[
+A_{\text{tot}} = |\mathcal{H}||\mathcal{I}| + |\mathcal{O}||\mathcal{H}|.
+\]
+If at least an \(\alpha\) fraction of arcs must be deleted, then the number of kept arcs can be at most \((1-\alpha)A_{\text{tot}}\):
+\[
+\sum_{j\in\mathcal{H}}\sum_{i\in\mathcal{I}} z^{(1)}_{ji}
++
+\sum_{k\in\mathcal{O}}\sum_{j\in\mathcal{H}} z^{(2)}_{kj}
+\;\le\;
+(1-\alpha)\, A_{\text{tot}}.
+\]
+
+Equivalently, if exactly an \(\alpha\) fraction of arcs must be deleted, impose:
+\[
+\sum_{j\in\mathcal{H}}\sum_{i\in\mathcal{I}} z^{(1)}_{ji}
++
+\sum_{k\in\mathcal{O}}\sum_{j\in\mathcal{H}} z^{(2)}_{kj}
+\;=\;
+(1-\alpha)\, A_{\text{tot}}.
+\]
+
+\[
+\textbf{Domain constraints}
+\]
+\[
+z^{(1)}_{ji}\in\{0,1\},\qquad
+z^{(2)}_{kj}\in\{0,1\},\qquad
+\delta^n_j\in\{0,1\},
+\]
+\[
+a^n_j\in\mathbb{R},\qquad
+h^n_j\ge 0,\qquad
+y^n_k\in\mathbb{R}.
+\]
+
+\[
+\textbf{Complete model}
+\]
+\[
+\begin{aligned}
+\min \quad & \sum_{n\in\mathcal{N}} \sum_{k\in\mathcal{O}}
+\left(y^n_k-\hat{y}^n_k\right)^2 \\
+\text{s.t.}\quad
+& a^n_j = \sum_{i\in\mathcal{I}} W^{(1)}_{ji}\, x^n_i \, z^{(1)}_{ji} + b^{(1)}_j,
+&& \forall n\in\mathcal{N},\; j\in\mathcal{H},\\
+& h^n_j \ge a^n_j,
+&& \forall n\in\mathcal{N},\; j\in\mathcal{H},\\
+& h^n_j \ge 0,
+&& \forall n\in\mathcal{N},\; j\in\mathcal{H},\\
+& h^n_j \le a^n_j - L^n_j(1-\delta^n_j),
+&& \forall n\in\mathcal{N},\; j\in\mathcal{H},\\
+& h^n_j \le U^n_j \delta^n_j,
+&& \forall n\in\mathcal{N},\; j\in\mathcal{H},\\
+& y^n_k = \sum_{j\in\mathcal{H}} W^{(2)}_{kj}\, h^n_j \, z^{(2)}_{kj} + b^{(2)}_k,
+&& \forall n\in\mathcal{N},\; k\in\mathcal{O},\\
+& \sum_{j\in\mathcal{H}}\sum_{i\in\mathcal{I}} z^{(1)}_{ji}
++
+\sum_{k\in\mathcal{O}}\sum_{j\in\mathcal{H}} z^{(2)}_{kj}
+\le (1-\alpha)\,A_{\text{tot}}, \\
+& z^{(1)}_{ji}\in\{0,1\},
+&& \forall j\in\mathcal{H},\; i\in\mathcal{I},\\
+& z^{(2)}_{kj}\in\{0,1\},
+&& \forall k\in\mathcal{O},\; j\in\mathcal{H},\\
+& \delta^n_j\in\{0,1\},
+&& \forall n\in\mathcal{N},\; j\in\mathcal{H},\\
+& a^n_j\in\mathbb{R},\; h^n_j\ge 0,\; y^n_k\in\mathbb{R},
+&& \forall n\in\mathcal{N},\; j\in\mathcal{H},\; k\in\mathcal{O}.
+\end{aligned}
+\]
 \end{document}
