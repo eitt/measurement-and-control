@@ -6,6 +6,7 @@
     "validation_size": 0.2,
     "clip_max": 125,
     "random_seed": 1952,
+    "normalization_mode": "global_standard",
     "min_hidden_layers": 1,
     "max_hidden_layers": 2,
     "min_neurons": 10,
@@ -47,61 +48,71 @@
     "output_dir": "outputs/torch_pytorch",
     "verbose": true
   },
+  "split_summary": {
+    "split_method": "engine_level_from_official_train",
+    "normalization_mode": "global_standard",
+    "official_train_units": 100,
+    "search_train_units": 80,
+    "validation_units": 20,
+    "search_train_windows": 14071,
+    "validation_windows": 3660,
+    "full_training_windows": 17731
+  },
   "stage1": {
     "best_candidate": {
-      "architecture": "relu:[100, 100]",
-      "low_fidelity_score": 216.96677907714843,
-      "validation_mse": 212.73667907714844,
-      "validation_mae": 10.945516586303711,
-      "complexity_penalty": 42.301,
-      "num_parameters": 40301
+      "architecture": "relu:[98, 100]",
+      "low_fidelity_score": 197.42611459960938,
+      "validation_mse": 193.27621459960938,
+      "validation_mae": 10.684669494628906,
+      "complexity_penalty": 41.499,
+      "num_parameters": 39499
     },
     "top_candidates": [
       {
-        "architecture": "relu:[100, 100]",
-        "low_fidelity_score": 216.96677907714843,
-        "validation_mse": 212.73667907714844,
-        "validation_mae": 10.945516586303711,
-        "complexity_penalty": 42.301,
-        "num_parameters": 40301
+        "architecture": "relu:[98, 100]",
+        "low_fidelity_score": 197.42611459960938,
+        "validation_mse": 193.27621459960938,
+        "validation_mae": 10.684669494628906,
+        "complexity_penalty": 41.499,
+        "num_parameters": 39499
       },
       {
-        "architecture": "relu:[99, 86]",
-        "low_fidelity_score": 225.59892348632812,
-        "validation_mse": 221.55032348632812,
-        "validation_mae": 11.386094093322754,
-        "complexity_penalty": 40.486,
-        "num_parameters": 38486
+        "architecture": "relu:[97, 100]",
+        "low_fidelity_score": 204.47755207519532,
+        "validation_mse": 200.3677520751953,
+        "validation_mae": 10.572298049926758,
+        "complexity_penalty": 41.098,
+        "num_parameters": 39098
       },
       {
-        "architecture": "relu:[99, 89]",
-        "low_fidelity_score": 226.61205734863282,
-        "validation_mse": 222.5331573486328,
-        "validation_mae": 11.397076606750488,
-        "complexity_penalty": 40.789,
-        "num_parameters": 38789
+        "architecture": "relu:[95, 100]",
+        "low_fidelity_score": 205.55296120605468,
+        "validation_mse": 201.5233612060547,
+        "validation_mae": 10.89405345916748,
+        "complexity_penalty": 40.296,
+        "num_parameters": 38296
       }
     ],
-    "evaluated_candidates": 11,
+    "evaluated_candidates": 15,
     "invalid_candidates": [],
     "history": [
-      228.83791733398436,
-      216.96677907714843,
-      216.96677907714843,
-      216.96677907714843,
-      216.96677907714843
+      211.85642624511718,
+      207.3113229248047,
+      207.3113229248047,
+      197.42611459960938,
+      197.42611459960938
     ],
-    "time_seconds": 96.62232419999782
+    "time_seconds": 125.81021479994524
   },
   "stage2": {
     "retuned_candidates": [
       {
-        "architecture": "relu:[99, 86]",
-        "mean_validation_mse": 177.8988800048828,
-        "mean_validation_mae": 9.735398769378662,
-        "selection_score": 181.9474800048828,
-        "complexity_penalty": 40.486,
-        "num_parameters": 38486,
+        "architecture": "relu:[97, 100]",
+        "mean_validation_mse": 168.9088897705078,
+        "mean_validation_mae": 9.697039604187012,
+        "selection_score": 173.01868977050782,
+        "complexity_penalty": 41.098,
+        "num_parameters": 39098,
         "best_tuning": {
           "learning_rate": 0.001,
           "batch_size": 128,
@@ -111,12 +122,12 @@
         }
       },
       {
-        "architecture": "relu:[100, 100]",
-        "mean_validation_mse": 183.3453598022461,
-        "mean_validation_mae": 9.909290313720703,
-        "selection_score": 187.5754598022461,
-        "complexity_penalty": 42.301,
-        "num_parameters": 40301,
+        "architecture": "relu:[95, 100]",
+        "mean_validation_mse": 171.1311492919922,
+        "mean_validation_mae": 9.737825393676758,
+        "selection_score": 175.16074929199218,
+        "complexity_penalty": 40.296,
+        "num_parameters": 38296,
         "best_tuning": {
           "learning_rate": 0.001,
           "batch_size": 128,
@@ -126,14 +137,14 @@
         }
       },
       {
-        "architecture": "relu:[99, 89]",
-        "mean_validation_mse": 183.62744903564453,
-        "mean_validation_mae": 9.936981678009033,
-        "selection_score": 187.70634903564454,
-        "complexity_penalty": 40.789,
-        "num_parameters": 38789,
+        "architecture": "relu:[98, 100]",
+        "mean_validation_mse": 177.7881622314453,
+        "mean_validation_mae": 10.02934980392456,
+        "selection_score": 181.93806223144531,
+        "complexity_penalty": 41.499,
+        "num_parameters": 39499,
         "best_tuning": {
-          "learning_rate": 0.001,
+          "learning_rate": 0.0005,
           "batch_size": 128,
           "weight_decay": 0.0,
           "activation": "relu",
@@ -142,10 +153,10 @@
       }
     ],
     "selected_candidate": {
-      "architecture": "relu:[99, 86]",
-      "mean_validation_mse": 177.8988800048828,
-      "mean_validation_mae": 9.735398769378662,
-      "selection_score": 181.9474800048828,
+      "architecture": "relu:[97, 100]",
+      "mean_validation_mse": 168.9088897705078,
+      "mean_validation_mae": 9.697039604187012,
+      "selection_score": 173.01868977050782,
       "best_tuning": {
         "learning_rate": 0.001,
         "batch_size": 128,
@@ -154,10 +165,10 @@
         "repeats": 2
       }
     },
-    "time_seconds": 808.8129540999653
+    "time_seconds": 408.5373097000411
   },
   "final_model": {
-    "architecture": "relu:[99, 86]",
+    "architecture": "relu:[97, 100]",
     "best_tuning": {
       "learning_rate": 0.001,
       "batch_size": 128,
@@ -166,9 +177,9 @@
       "repeats": 2
     },
     "final_train_epochs": 100,
-    "final_train_time_seconds": 82.0388924999861,
-    "official_test_mse": 2621.062744140625,
-    "official_test_mae": 44.0032844543457
+    "final_train_time_seconds": 81.79912929993588,
+    "official_test_mse": 257.7230529785156,
+    "official_test_mae": 11.905146598815918
   },
-  "data_prep_time_seconds": 0.9934485000558197
+  "data_prep_time_seconds": 1.1143797000404447
 }

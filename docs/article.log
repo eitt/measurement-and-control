@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.29 (MiKTeX 26.2) (preloaded format=pdflatex 2026.3.4)  24 MAR 2026 17:05
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (MiKTeX 26.2) (preloaded format=pdflatex 2026.3.4)  24 MAR 2026 18:36
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -317,7 +317,38 @@ Package: float 2001/11/08 v1.3d Float enhancements (AL)
 \@float@everytoks=\toks27
 \@floatcapt=\box56
 )
-(C:\Users\LEONA\AppData\Local\Programs\MiKTeX\tex/latex/xcolor\xcolor.sty
+(C:\Users\LEONA\AppData\Local\Programs\MiKTeX\tex/latex/algorithms\algorithm.st
+y
+Package: algorithm 2009/08/24 v0.1 Document Style `algorithm' - floating enviro
+nment
+ (C:\Users\LEONA\AppData\Local\Programs\MiKTeX\tex/latex/base\ifthen.sty
+Package: ifthen 2024/03/16 v1.1e Standard LaTeX ifthen package (DPC)
+)
+\@float@every@algorithm=\toks28
+\c@algorithm=\count315
+)
+(C:\Users\LEONA\AppData\Local\Programs\MiKTeX\tex/latex/algorithmicx\algpseudoc
+ode.sty
+Package: algpseudocode 
+
+(C:\Users\LEONA\AppData\Local\Programs\MiKTeX\tex/latex/algorithmicx\algorithmi
+cx.sty
+Package: algorithmicx 2005/04/27 v1.2 Algorithmicx
+
+Document Style algorithmicx 1.2 - a greatly improved `algorithmic' style
+\c@ALG@line=\count316
+\c@ALG@rem=\count317
+\c@ALG@nested=\count318
+\ALG@tlm=\skip55
+\ALG@thistlm=\skip56
+\c@ALG@Lnr=\count319
+\c@ALG@blocknr=\count320
+\c@ALG@storecount=\count321
+\c@ALG@tmpcounter=\count322
+\ALG@tmplength=\skip57
+)
+Document Style - pseudocode environments for use with the `algorithmicx' style
+) (C:\Users\LEONA\AppData\Local\Programs\MiKTeX\tex/latex/xcolor\xcolor.sty
 Package: xcolor 2024/09/29 v3.02 LaTeX color extensions (UK)
 
 (C:\Users\LEONA\AppData\Local\Programs\MiKTeX\tex/latex/graphics-cfg\color.cfg
@@ -343,7 +374,7 @@ Package: expl3 2026-01-19 L3 programming layer (loader)
 (C:\Users\LEONA\AppData\Local\Programs\MiKTeX\tex/latex/l3backend\l3backend-pdf
 tex.def
 File: l3backend-pdftex.def 2025-10-09 L3 backend support: PDF output (pdfTeX)
-\l__color_backend_stack_int=\count315
+\l__color_backend_stack_int=\count323
 ))
 Package: fontawesome5 2022/05/02 v5.15.4 Font Awesome 5
 
@@ -361,43 +392,42 @@ Package: fontawesome5-generic-helper 2022/05/02 v5.15.4 non-uTeX helper for fon
 tawesome5
 
 (C:\Users\LEONA\AppData\Local\Programs\MiKTeX\tex/latex/fontawesome5\fontawesom
-e5-mapping.def)))
-No file article.aux.
+e5-mapping.def))) (article.aux)
 \openout1 = `article.aux'.
 
-LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 36.
-LaTeX Font Info:    ... okay on input line 36.
-LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 36.
-LaTeX Font Info:    ... okay on input line 36.
-LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 36.
-LaTeX Font Info:    ... okay on input line 36.
-LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 36.
-LaTeX Font Info:    ... okay on input line 36.
-LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 36.
-LaTeX Font Info:    ... okay on input line 36.
-LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 36.
-LaTeX Font Info:    ... okay on input line 36.
-LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 36.
-LaTeX Font Info:    ... okay on input line 36.
-LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 36.
-LaTeX Font Info:    ... okay on input line 36.
-LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 36.
-LaTeX Font Info:    ... okay on input line 36.
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 38.
+LaTeX Font Info:    ... okay on input line 38.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 38.
+LaTeX Font Info:    ... okay on input line 38.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 38.
+LaTeX Font Info:    ... okay on input line 38.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 38.
+LaTeX Font Info:    ... okay on input line 38.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 38.
+LaTeX Font Info:    ... okay on input line 38.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 38.
+LaTeX Font Info:    ... okay on input line 38.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 38.
+LaTeX Font Info:    ... okay on input line 38.
+LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 38.
+LaTeX Font Info:    ... okay on input line 38.
+LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 38.
+LaTeX Font Info:    ... okay on input line 38.
 
 (C:\Users\LEONA\AppData\Local\Programs\MiKTeX\tex/context/base/mkii\supp-pdf.mk
 ii
 [Loading MPS to PDF converter (version 2006.09.02).]
-\scratchcounter=\count316
+\scratchcounter=\count324
 \scratchdimen=\dimen185
 \scratchbox=\box57
-\nofMPsegments=\count317
-\nofMParguments=\count318
-\everyMPshowfont=\toks28
-\MPscratchCnt=\count319
+\nofMPsegments=\count325
+\nofMParguments=\count326
+\everyMPshowfont=\toks29
+\MPscratchCnt=\count327
 \MPscratchDim=\dimen186
-\MPnumerator=\count320
-\makeMPintoPDFobject=\count321
-\everyMPtoPDFconversion=\toks29
+\MPnumerator=\count328
+\makeMPintoPDFobject=\count329
+\everyMPtoPDFconversion=\toks30
 )
 (C:\Users\LEONA\AppData\Local\Programs\MiKTeX\tex/latex/epstopdf-pkg\epstopdf-b
 ase.sty
@@ -443,125 +473,127 @@ File: epstopdf-sys.cfg 2021/03/18 v2.0 Configuration of epstopdf for MiKTeX
 * \@reversemarginfalse
 * (1in=72.27pt=25.4mm, 1cm=28.453pt)
 
-Package hyperref Info: Link coloring OFF on input line 36.
+Package hyperref Info: Link coloring OFF on input line 38.
+(article.out) (article.out)
 \@outlinefile=\write3
 \openout3 = `article.out'.
 
-LaTeX Font Info:    Trying to load font information for U+msa on input line 39.
+LaTeX Font Info:    Trying to load font information for U+msa on input line 41.
+
 
 (C:\Users\LEONA\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\umsa.fd
 File: umsa.fd 2013/01/14 v3.01 AMS symbols A
 )
-LaTeX Font Info:    Trying to load font information for U+msb on input line 39.
+LaTeX Font Info:    Trying to load font information for U+msb on input line 41.
 
 
 (C:\Users\LEONA\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\umsb.fd
 File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 )
 LaTeX Font Info:    Trying to load font information for U+fontawesomebrands1 on
- input line 39.
+ input line 41.
 
 (C:\Users\LEONA\AppData\Local\Programs\MiKTeX\tex/latex/fontawesome5\ufontaweso
 mebrands1.fd)
 LaTeX Font Info:    Font shape `U/fontawesomebrands1/solid/n' in size <14.4> no
 t available
 (Font)              Font shape `U/fontawesomebrands1/regular/n' tried instead o
-n input line 39.
+n input line 41.
 
 
-LaTeX Warning: Citation `Saxena2008' on page 1 undefined on input line 53.
+LaTeX Warning: Citation `Saxena2008' on page 1 undefined on input line 55.
 
 [1
 
 {C:/Users/LEONA/AppData/Local/MiKTeX/fonts/map/pdftex/pdftex.map}{C:/Users/LEON
 A/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/fontawesome5/fa5brands1.enc}]
 
-LaTeX Warning: Citation `Saxena2008' on page 2 undefined on input line 55.
+LaTeX Warning: Citation `Saxena2008' on page 2 undefined on input line 57.
 
 
-LaTeX Warning: Citation `Lei2018Machinery' on page 2 undefined on input line 55
+LaTeX Warning: Citation `Lei2018Machinery' on page 2 undefined on input line 57
 .
 
 
-LaTeX Warning: Citation `Wu2018Remaining' on page 2 undefined on input line 55.
+LaTeX Warning: Citation `Wu2018Remaining' on page 2 undefined on input line 57.
 
 
 
-LaTeX Warning: Citation `Peringal2024' on page 2 undefined on input line 55.
+LaTeX Warning: Citation `Peringal2024' on page 2 undefined on input line 57.
 
 
-LaTeX Warning: Citation `Elsherif2025' on page 2 undefined on input line 55.
+LaTeX Warning: Citation `Elsherif2025' on page 2 undefined on input line 57.
 
 
-LaTeX Warning: Citation `Chen2024' on page 2 undefined on input line 55.
+LaTeX Warning: Citation `Chen2024' on page 2 undefined on input line 57.
 
 
-LaTeX Warning: Citation `Mo2021Remaining' on page 2 undefined on input line 55.
+LaTeX Warning: Citation `Mo2021Remaining' on page 2 undefined on input line 57.
 
 
 
 LaTeX Warning: Citation `Yang2020Hyperparameter' on page 2 undefined on input l
-ine 57.
+ine 59.
 
 
 LaTeX Warning: Citation `Snoek2012Practical' on page 2 undefined on input line 
-57.
+59.
 
 
-LaTeX Warning: Citation `Xue2025' on page 2 undefined on input line 57.
+LaTeX Warning: Citation `Xue2025' on page 2 undefined on input line 59.
 
 
-Overfull \hbox (0.88454pt too wide) in paragraph at lines 57--58
+Overfull \hbox (0.88454pt too wide) in paragraph at lines 59--60
 \OT1/cmr/m/n/12 tates ro-bust hy-per-pa-ram-e-ter op-ti-miza-tion (HPO). A con-
 cise ex-am-i-na-tion of HPO method-
  []
 
 
 LaTeX Warning: Citation `Schwartz2020GreenAI' on page 2 undefined on input line
- 59.
+ 61.
 
 
 LaTeX Warning: Citation `Strubell2019Energy' on page 2 undefined on input line 
-59.
+61.
 
 
 LaTeX Warning: Citation `Garcia2019Estimation' on page 2 undefined on input lin
-e 59.
+e 61.
 
 
-LaTeX Warning: Citation `Dhar2021Survey' on page 2 undefined on input line 59.
+LaTeX Warning: Citation `Dhar2021Survey' on page 2 undefined on input line 61.
 
 
-LaTeX Warning: Citation `Wu2022Sustainable' on page 2 undefined on input line 5
-9.
+LaTeX Warning: Citation `Wu2022Sustainable' on page 2 undefined on input line 6
+1.
 
 
 LaTeX Warning: Citation `Patterson2021Carbon' on page 2 undefined on input line
- 59.
+ 61.
 
 
-LaTeX Warning: Citation `Li2023Edge' on page 2 undefined on input line 59.
+LaTeX Warning: Citation `Li2023Edge' on page 2 undefined on input line 61.
 
 
-LaTeX Warning: Citation `Merenda2020Edge' on page 2 undefined on input line 59.
+LaTeX Warning: Citation `Merenda2020Edge' on page 2 undefined on input line 61.
 
 
 
 LaTeX Warning: Citation `Wang2020Convergence' on page 2 undefined on input line
- 59.
+ 61.
 
 
-LaTeX Warning: Citation `Zhou2019Edge' on page 2 undefined on input line 59.
+LaTeX Warning: Citation `Zhou2019Edge' on page 2 undefined on input line 61.
 
 
-LaTeX Warning: Citation `Jiang2021Model' on page 2 undefined on input line 59.
+LaTeX Warning: Citation `Jiang2021Model' on page 2 undefined on input line 61.
 
 
-LaTeX Warning: Citation `Chen2019Deep' on page 2 undefined on input line 59.
+LaTeX Warning: Citation `Chen2019Deep' on page 2 undefined on input line 61.
 
 [2]
 
-LaTeX Warning: Citation `Gong2023' on page 3 undefined on input line 61.
+LaTeX Warning: Citation `Gong2023' on page 3 undefined on input line 63.
 
 (article_methodology_updated.tex
 
@@ -575,23 +607,36 @@ pdfTeX warning (ext4): destination with the same identifier (name{table.1}) has
  been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.41 \begin{equation}
-                     ] [5])
+l.38 
+     ] [5]
 
-LaTeX Warning: Reference `tab:results_summary' on page 6 undefined on input lin
-e 149.
+LaTeX Warning: Reference `alg:two_stage_ann_pso' on page 6 undefined on input l
+ine 76.
 
-[6]
+Package hyperref Info: bookmark level for unknown algorithm defaults to 0 on in
+put line 79.
+) [6] [7]
 
-LaTeX Warning: Reference `fig:dashboard' on page 7 undefined on input line 168.
-
-
-
-LaTeX Warning: Reference `fig:dashboard' on page 7 undefined on input line 171.
-
+LaTeX Warning: Reference `tab:results_summary' on page 8 undefined on input lin
+e 151.
 
 
-LaTeX Warning: File `universal_dashboard.png' not found on input line 175.
+LaTeX Warning: Reference `fig:dashboard' on page 8 undefined on input line 170.
+
+
+
+LaTeX Warning: Reference `fig:dashboard' on page 8 undefined on input line 173.
+
+
+[8
+pdfTeX warning (ext4): destination with the same identifier (name{table.2}) has
+ been already used, duplicate ignored
+<argument> ...shipout:D \box_use:N \l_shipout_box 
+                                                  \__shipout_drop_firstpage_...
+l.174 
+      ]
+
+LaTeX Warning: File `universal_dashboard.png' not found on input line 177.
 
 
 ! Package pdftex.def Error: File `universal_dashboard.png' not found: using dra
@@ -601,18 +646,18 @@ See the pdftex.def package documentation for explanation.
 Type  H <return>  for immediate help.
  ...                                              
                                                   
-l.175 ...h=1.0\linewidth]{universal_dashboard.png}
+l.177 ...h=1.0\linewidth]{universal_dashboard.png}
                                                   
 Try typing  <return>  to proceed.
 If that doesn't work, type  X <return>  to quit.
 
  
 Here is how much of TeX's memory you used:
- 14086 strings out of 467867
- 237666 string characters out of 5418335
- 644130 words of memory out of 5000000
- 42790 multiletter control sequences out of 15000+600000
- 639977 words of font info for 87 fonts, out of 8000000 for 9000
+ 14762 strings out of 467867
+ 248613 string characters out of 5418335
+ 654770 words of memory out of 5000000
+ 43433 multiletter control sequences out of 15000+600000
+ 642154 words of font info for 95 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 75i,11n,79p,1721b,470s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 75i,11n,79p,1721b,464s stack positions out of 10000i,1000n,20000p,200000b,200000s
 !  ==> Fatal error occurred, no output PDF file produced!

@@ -32,7 +32,7 @@ import seaborn as sns
 import torch
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -95,6 +95,7 @@ class TrainingConfig:
     validation_size: float = 0.2
     clip_max: int = 125
     random_seed: int = 42
+    normalization_mode: str = "global_standard"
 
     min_hidden_layers: int = 1
     max_hidden_layers: int = 2
@@ -142,6 +143,11 @@ class TrainingConfig:
             self.tuning_activation_choices = self.activation_choices
         if not 0 < self.validation_size < 1:
             raise ValueError("validation_size must be between 0 and 1.")
+        if self.normalization_mode not in {"global_standard", "global_minmax", "per_unit_minmax"}:
+            raise ValueError(
+                "normalization_mode must be one of: "
+                "global_standard, global_minmax, per_unit_minmax."
+            )
         if self.min_hidden_layers > self.max_hidden_layers:
             raise ValueError("min_hidden_layers must be <= max_hidden_layers.")
         if self.min_neurons > self.max_neurons:
@@ -275,6 +281,7 @@ class TrainSplitBundle:
     input_dim: int
     train_unit_count: int
     val_unit_count: int
+    full_train_feature_scaler: object
     split_method: str = "engine_level_from_official_train"
 
 
@@ -343,11 +350,62 @@ def select_features_by_dataset(train_df: pd.DataFrame, dataset_name: str) -> pd.
     return train_df.drop(columns=cols_to_drop, errors="ignore")
 
 
+def fit_feature_scaler(df: pd.DataFrame, normalization_mode: str) -> object:
+    """
+    Fit a feature scaler using training data only.
+
+    global_standard:
+        z-score normalization using training-set mean/std.
+    global_minmax:
+        min-max scaling using training-set extrema.
+    per_unit_minmax:
+        no global scaler object; scaling is performed independently per unit.
+    """
+
+    if normalization_mode == "per_unit_minmax":
+        return None
+
+    feature_cols = list(df.columns[2:])
+    if normalization_mode == "global_standard":
+        scaler = StandardScaler()
+    elif normalization_mode == "global_minmax":
+        scaler = MinMaxScaler()
+    else:  # pragma: no cover - guarded by TrainingConfig validation
+        raise ValueError(f"Unsupported normalization_mode: {normalization_mode}")
+
+    scaler.fit(df[feature_cols])
+    return scaler
+
+
+def scale_one_unit(
+    unit_df: pd.DataFrame,
+    feature_cols: Sequence[str],
+    normalization_mode: str,
+    fitted_scaler: Optional[object],
+) -> np.ndarray:
+    """Scale one engine trajectory under the requested normalization policy."""
+
+    values = unit_df[list(feature_cols)]
+    if normalization_mode == "per_unit_minmax":
+        scaler = MinMaxScaler()
+        scaled = scaler.fit_transform(values)
+    else:
+        if fitted_scaler is None:
+            raise ValueError(
+                "A fitted training-derived scaler is required for "
+                f"normalization_mode={normalization_mode}."
+            )
+        scaled = fitted_scaler.transform(values)
+    return np.asarray(scaled, dtype=np.float32)
+
+
 def build_sequences(
     df: pd.DataFrame,
     rul: pd.Series,
     seq_len: int = 30,
     unit_ids: Optional[Sequence[int]] = None,
+    normalization_mode: str = "global_standard",
+    fitted_scaler: Optional[object] = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Build flattened rolling windows for training from the run-to-failure split."""
 
@@ -359,8 +417,12 @@ def build_sequences(
     for unit in units:
         unit_df = df[df["col_1"] == unit]
         unit_rul = rul[unit_df.index]
-        scaler = MinMaxScaler()
-        scaled = scaler.fit_transform(unit_df[feature_cols])
+        scaled = scale_one_unit(
+            unit_df=unit_df,
+            feature_cols=feature_cols,
+            normalization_mode=normalization_mode,
+            fitted_scaler=fitted_scaler,
+        )
 
         for i in range(len(unit_df) - seq_len + 1):
             sequences.append(scaled[i : i + seq_len].reshape(-1))
@@ -373,6 +435,8 @@ def build_official_test_samples(
     df: pd.DataFrame,
     rul_targets: np.ndarray,
     seq_len: int = 30,
+    normalization_mode: str = "global_standard",
+    fitted_scaler: Optional[object] = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Build one prediction sample per official test engine.
@@ -393,8 +457,12 @@ def build_official_test_samples(
     targets: List[float] = []
     for idx, unit in enumerate(units):
         unit_df = df[df["col_1"] == unit]
-        scaler = MinMaxScaler()
-        scaled = scaler.fit_transform(unit_df[feature_cols]).astype(np.float32)
+        scaled = scale_one_unit(
+            unit_df=unit_df,
+            feature_cols=feature_cols,
+            normalization_mode=normalization_mode,
+            fitted_scaler=fitted_scaler,
+        )
         if len(unit_df) >= seq_len:
             window = scaled[-seq_len:]
         else:
@@ -434,19 +502,32 @@ def prepare_training_split(
         random_state=config.random_seed,
         shuffle=True,
     )
+    train_subset = reduced[reduced["col_1"].isin(train_unit_ids)].copy()
+    full_train_scaler = fit_feature_scaler(reduced, config.normalization_mode)
+    search_scaler = fit_feature_scaler(train_subset, config.normalization_mode)
     X_train, y_train = build_sequences(
         reduced,
         rul,
         seq_len=config.seq_len,
         unit_ids=sorted(train_unit_ids),
+        normalization_mode=config.normalization_mode,
+        fitted_scaler=search_scaler,
     )
     X_val, y_val = build_sequences(
         reduced,
         rul,
         seq_len=config.seq_len,
         unit_ids=sorted(val_unit_ids),
+        normalization_mode=config.normalization_mode,
+        fitted_scaler=search_scaler,
     )
-    X_full, y_full = build_sequences(reduced, rul, seq_len=config.seq_len)
+    X_full, y_full = build_sequences(
+        reduced,
+        rul,
+        seq_len=config.seq_len,
+        normalization_mode=config.normalization_mode,
+        fitted_scaler=full_train_scaler,
+    )
     return TrainSplitBundle(
         dataset_name=dataset_name,
         X_train=X_train,
@@ -458,6 +539,7 @@ def prepare_training_split(
         input_dim=X_full.shape[1],
         train_unit_count=len(train_unit_ids),
         val_unit_count=len(val_unit_ids),
+        full_train_feature_scaler=full_train_scaler,
     )
 
 
@@ -465,6 +547,7 @@ def prepare_official_test_split(
     dataset_name: str,
     data_root: Path,
     config: TrainingConfig,
+    fitted_scaler: Optional[object],
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Load and preprocess only the official benchmark test split.
@@ -485,7 +568,13 @@ def prepare_official_test_split(
     test_df = load_cmapss(test_path)
     rul_targets = load_rul_targets(rul_path)
     reduced = select_features_by_dataset(test_df, dataset_name)
-    return build_official_test_samples(reduced, rul_targets, seq_len=config.seq_len)
+    return build_official_test_samples(
+        reduced,
+        rul_targets,
+        seq_len=config.seq_len,
+        normalization_mode=config.normalization_mode,
+        fitted_scaler=fitted_scaler,
+    )
 
 
 def activation_from_name(name: str) -> nn.Module:
@@ -1150,7 +1239,14 @@ def run_full_pipeline(
 
     # Touch the official benchmark test split only after model selection is
     # complete. This keeps train_FD00x.txt and test_FD00x.txt fully separate.
-    X_test, y_test = prepare_official_test_split(dataset_name, data_root, config)
+    # The final test features are transformed with the scaler fitted on the full
+    # official training split.
+    X_test, y_test = prepare_official_test_split(
+        dataset_name,
+        data_root,
+        config,
+        fitted_scaler=split_bundle.full_train_feature_scaler,
+    )
     final_test_metrics = evaluate_model(final_outcome["model"], (X_test, y_test), config.device)
 
     output_dir = Path(config.output_dir)
@@ -1174,6 +1270,7 @@ def run_full_pipeline(
         "config": asdict(config),
         "split_summary": {
             "split_method": split_bundle.split_method,
+            "normalization_mode": config.normalization_mode,
             "official_train_units": int(split_bundle.train_unit_count + split_bundle.val_unit_count),
             "search_train_units": int(split_bundle.train_unit_count),
             "validation_units": int(split_bundle.val_unit_count),
@@ -1263,6 +1360,8 @@ def run_full_pipeline(
 
     return {
         "Dataset": dataset_name,
+        "Normalization Mode": config.normalization_mode,
+        "Split Method": split_bundle.split_method,
         "Stage1 Best Candidate": architecture_to_string(search_result.best_candidate.architecture),
         "Stage1 Low-Fidelity Score": float(search_result.best_candidate.objective_score),
         "Stage1 Validation MSE": float(search_result.best_candidate.validation_mse),
@@ -1338,6 +1437,17 @@ def parse_args() -> argparse.Namespace:
         help="Datasets to run, e.g. FD001 FD002.",
     )
     parser.add_argument("--seq-len", type=int, default=30, help="Sequence length.")
+    parser.add_argument(
+        "--normalization-mode",
+        type=str,
+        default="global_standard",
+        choices=["global_standard", "global_minmax", "per_unit_minmax"],
+        help=(
+            "Feature normalization policy. global_standard fits a z-score scaler on "
+            "training data only; global_minmax fits a train-derived min-max scaler; "
+            "per_unit_minmax scales each engine independently."
+        ),
+    )
     parser.add_argument(
         "--validation-size",
         type=float,
@@ -1471,6 +1581,7 @@ def main() -> None:
     )
     config = TrainingConfig(
         seq_len=args.seq_len,
+        normalization_mode=args.normalization_mode,
         validation_size=args.validation_size,
         clip_max=args.clip_max,
         random_seed=args.seed,

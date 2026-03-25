@@ -22,19 +22,19 @@ This study uses the NASA Commercial Modular Aero-Propulsion System Simulation (C
 
 These descriptive statistics confirm the benchmark taxonomy. FD001 and FD003 correspond to single-regime subsets, whereas FD002 and FD004 contain six operating conditions. The column-level audit of the released files makes this distinction explicit: the operational-setting columns have near-zero spread in FD001 and FD003, but wide variation in FD002 and FD004, with standard deviations of approximately 14.75 for \texttt{col\_3}, 0.31 for \texttt{col\_4}, and 14.25 for \texttt{col\_5}. The two-fault subsets (FD003 and FD004) also exhibit longer and more variable degradation histories, with mean training lengths near 246--247 cycles, compared with approximately 206 cycles for FD001 and FD002.
 
-\subsubsection{Feature Selection, Regime Handling, and Per-Unit Normalization}
+\subsubsection{Feature Selection, Regime Handling, and Training-Derived Normalization}
 The preprocessing pipeline follows the raw C-MAPSS schema documented in the dataset audit. Columns \texttt{col\_1} and \texttt{col\_2} correspond to the unit identifier and cycle counter, respectively, and are not used as direct predictors. Columns \texttt{col\_3}--\texttt{col\_5} are the three operational settings, while columns \texttt{col\_6}--\texttt{col\_26} map to sensor measurements 1--21.
 
 A compact sensor subset is retained in order to keep the ANN lightweight enough for repeated screening inside the optimization loop. Following the literature-derived 10-sensor baseline reviewed in this study, Sensors $\{2,6,7,8,11,13,14,19,20,21\}$ are preserved and Sensors $\{1,3,4,5,9,10,12,15,16,17,18\}$ are removed. Under the code naming convention, this fixed sensor filter corresponds to dropping \texttt{col\_6}, \texttt{col\_8}, \texttt{col\_9}, \texttt{col\_10}, \texttt{col\_14}, \texttt{col\_15}, \texttt{col\_17}, \texttt{col\_20}, \texttt{col\_21}, \texttt{col\_22}, and \texttt{col\_23}. The descriptive statistics partially support this decision: in FD001 and FD003, \texttt{col\_6}, \texttt{col\_10}, \texttt{col\_21}, and \texttt{col\_23} are constant, and \texttt{col\_15} is constant or nearly constant. However, several of these channels vary more strongly in FD002 and FD004, so this fixed sensor filter should be interpreted as a conservative, literature-aligned baseline rather than a universal claim that every removed channel is non-informative in all subsets.
 
 The treatment of the operational settings is deliberately dataset-aware. In FD001 and FD003, the settings are dropped because their empirical spread is effectively zero and they add little information beyond noise. In FD002 and FD004, the same variables are retained because they encode the six operating regimes that materially affect engine behavior. This choice aligns the implementation with both the descriptive statistics of the local files and the benchmark definition reported by NASA.
 
-After feature selection, Min--Max normalization is applied independently to each engine trajectory in order to reduce scale dominance among heterogeneous sensors. For unit $i$ at cycle $c$, with retained feature vector $\mathbf{x}_{i,c}\in\mathbb{R}^{d}$, the normalized vector is
+After feature selection, the default pipeline applies a training-derived global standardization rather than a per-trajectory rescaling. Let $\boldsymbol{\mu}_{\mathrm{train}}$ and $\boldsymbol{\sigma}_{\mathrm{train}}$ denote the feature-wise mean and standard deviation estimated from the training portion of the official training split. For unit $i$ at cycle $c$, with retained feature vector $\mathbf{x}_{i,c}\in\mathbb{R}^{d}$, the normalized vector is
 \begin{equation}
-    \tilde{\mathbf{x}}_{i,c}=\frac{\mathbf{x}_{i,c}-\min(\mathbf{X}_i)}{\max(\mathbf{X}_i)-\min(\mathbf{X}_i)},
+    \tilde{\mathbf{x}}_{i,c}=\frac{\mathbf{x}_{i,c}-\boldsymbol{\mu}_{\mathrm{train}}}{\boldsymbol{\sigma}_{\mathrm{train}}},
     \label{eq:normalization}
 \end{equation}
-where $\min(\mathbf{X}_i)$ and $\max(\mathbf{X}_i)$ are computed feature-wise over the available trajectory of unit $i$. The same per-unit transformation is used for both the training split and the official test split.
+The same fitted transformation is then applied to the corresponding validation engines and, for the final benchmark run, to the official test split. This choice was adopted for three methodological reasons. First, it preserves a common reference frame across engines, which is desirable when the optimization stage compares architectures on pooled windowed samples. Second, it avoids a mismatch between full training trajectories and truncated official test trajectories: a per-unit Min--Max transformation depends on each engine's own extrema, which are not equally informative in the shortened test runs. Third, compared with a global Min--Max mapping, z-score normalization is less sensitive to extreme values that can compress the dynamic range of the remaining samples. For reproducibility, the code still exposes global Min--Max and per-unit Min--Max alternatives, but the default workflow uses training-derived standardization.
 
 \subsubsection{Piecewise-Linear RUL Target Definition}
 For the run-to-failure training trajectories, the target Remaining Useful Life is computed from the last observed cycle of each engine. Let $C_i^{\max}$ denote the final cycle of unit $i$. The uncapped RUL at cycle $c$ is $C_i^{\max}-c$. Following the standard piecewise-linear convention in the C-MAPSS literature, the target is saturated at a maximum threshold $R_{\max}$ in order to reduce the influence of the long healthy phase:
@@ -73,4 +73,45 @@ with
 \end{equation}
 Here, $\mathrm{MSE}_{\mathrm{val}}$ is the validation mean squared error, $N_{\mathrm{layers}}$ is the number of hidden layers, and $N_{\mathrm{params}}$ is the number of trainable parameters. The complexity term discourages larger architectures unless they deliver meaningful validation gains. The default PSO configuration is inertia-based, with 5 particles, 5 iterations, inertia $w=0.5$, and acceleration coefficients $c_1=c_2=1.5$. Invalid candidates are logged and assigned infinite cost rather than interrupting the search. Under this design, PSO is not used to claim final global optimality; instead, it serves to reduce the structural search space at low computational cost.
 
-In Stage 2, only the top-$k$ Stage 1 structures (3 by default) are retrained with a larger budget and a small tuning grid over learning rate, batch size, weight decay, and, if enabled, activation function. This second stage uses a longer training horizon (100 epochs by default, with patience 15) and may repeat each shortlisted configuration across multiple seeds to stabilize selection, while avoiding the cost of exhaustively tuning every architecture visited by the swarm. The same complexity-aware score is used to rank the retuned candidates. Finally, the selected ANN is retrained on the full official training split and evaluated once on the official test split. This sequencing prevents information leakage from the test set into architecture search, preserves the original NASA benchmark structure, and makes the methodological claim explicit: PSO is used as a computationally efficient first-stage filter, whereas final model selection is based on selective retraining and tuning of only the most promising ANN structures.
+In Stage 2, only the top-$k$ Stage 1 structures (3 by default) are retrained with a larger budget and a small tuning grid over learning rate, batch size, weight decay, and, if enabled, activation function. This second stage uses a longer training horizon (100 epochs by default, with patience 15) and may repeat each shortlisted configuration across multiple seeds to stabilize selection, while avoiding the cost of exhaustively tuning every architecture visited by the swarm. The same complexity-aware score is used to rank the retuned candidates. Finally, the selected ANN is retrained on the full official training split and evaluated once on the official test split. This sequencing prevents information leakage from the test set into architecture search, preserves the original NASA benchmark structure, and makes the methodological claim explicit: PSO is used as a computationally efficient first-stage filter, whereas final model selection is based on selective retraining and tuning of only the most promising ANN structures. The complete protocol is summarized in Algorithm~\ref{alg:two_stage_ann_pso}.
+
+\begin{algorithm}[H]
+\caption{Two-stage ANN screening and selective retuning for C-MAPSS RUL prediction}
+\label{alg:two_stage_ann_pso}
+\begin{algorithmic}[1]
+\Require Dataset subset $D \in \{\mathrm{FD001},\mathrm{FD002},\mathrm{FD003},\mathrm{FD004}\}$, sequence length $L$, training RUL cap $R_{\max}$, feature policy, normalization mode, PSO settings, retuning settings
+\Ensure Final ANN $\mathcal{M}^{\star}$ and one-time official test metrics on $\texttt{test\_}D$
+\State Load $\texttt{train\_}D$ and compute capped training RUL targets using Eq.~\eqref{eq:rul_cap}
+\State Apply dataset-aware feature filtering to $\texttt{train\_}D$
+\State Split the engine units in $\texttt{train\_}D$ into internal training units and validation units
+\State Fit the search-stage scaler on the internal training units only
+\State Construct rolling windows of length $L$ for internal training and validation units using Eq.~\eqref{eq:window_embedding}
+\For{$t = 1$ to $T_{\mathrm{PSO}}$}
+    \For{each particle $p$ in the swarm}
+        \State Decode $p$ into a valid ANN architecture by rounding and clipping the particle position
+        \If{the candidate is invalid}
+            \State Assign infinite objective and continue
+        \EndIf
+        \State Build the ANN and train it under the low-fidelity budget
+        \State Evaluate validation MSE on the held-out validation engines
+        \State Compute $J_{\mathrm{LF}}$ using Eq.~\eqref{eq:low_fidelity_objective}
+        \State Update particle-best and global-best records
+    \EndFor
+    \State Update swarm velocities and positions
+\EndFor
+\State Select the top-$k$ Stage 1 architectures according to $J_{\mathrm{LF}}$
+\For{each shortlisted architecture}
+    \For{each Stage 2 hyperparameter setting in the tuning grid}
+        \State Retrain the ANN under the larger Stage 2 budget
+        \State Evaluate it on the same held-out validation engines
+        \State Rank the run with the complexity-aware selection score
+    \EndFor
+\EndFor
+\State Select the best retuned candidate $\mathcal{M}^{\star}$
+\State Refit the feature scaler on the full official training split
+\State Rebuild all official training windows and retrain $\mathcal{M}^{\star}$ on the full official training split
+\State Load $\texttt{test\_}D$ and $\texttt{RUL\_}D$ only after model selection is complete
+\State Apply the full-training scaler to the official test split and build one final window per test engine
+\State Evaluate $\mathcal{M}^{\star}$ once on the official benchmark test split and report the final metrics
+\end{algorithmic}
+\end{algorithm}

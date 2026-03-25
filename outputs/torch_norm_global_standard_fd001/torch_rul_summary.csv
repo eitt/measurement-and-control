@@ -1,0 +1,2 @@
+Dataset,Stage1 Best Candidate,Stage1 Low-Fidelity Score,Stage1 Validation MSE,Stage2 Selected Architecture,Stage2 Retuned Score,Stage2 Validation MSE,Final Test MSE,Final Test MAE,Stage1 Evaluations,Stage1 Time Sec,Stage2 Time Sec,Final Train Time Sec,Report Path
+FD001,"relu:[99, 86]",243.63261489257812,239.58401489257812,"relu:[89, 89]",177.82275009765624,174.13385009765625,222.96705627441406,11.391716003417969,6,36.379270599922165,98.64877770002931,30.615011299960315,outputs\torch_norm_global_standard_fd001\torch_two_stage_report_FD001.json

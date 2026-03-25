@@ -96,6 +96,13 @@ The workflow is intentionally split into two stages:
 - After Stage 1 screening and Stage 2 retuning, the selected model is retrained on the full official training split and evaluated once on the official test split.
 - This protocol is intended to stay comparable with papers that report results on the official C-MAPSS test split while still keeping a clean validation set for architecture search and tuning.
 
+### Normalization Protocol
+- The default normalization mode is `global_standard`.
+- In this mode, a `StandardScaler` is fit on training data only and then applied consistently to validation and official test samples.
+- For Stage 1 and Stage 2 model selection, the scaler is fit on the internal search/train engines only. For the final benchmark run, it is refit on the full official training split and then applied to the official test split.
+- This choice keeps a common sensor reference frame across engines and avoids relying on per-engine minima and maxima from truncated test trajectories.
+- The pipeline also supports `global_minmax` and `per_unit_minmax` through `--normalization-mode`, but `global_standard` is the recommended default because it is less sensitive to outliers than global min-max scaling and more deployment-consistent than per-unit min-max scaling.
+
 ### Run the full experiment
 ```bash
 python scripts/run_torch_pipeline.py --skip-install --data-root data/CMAPSSData
@@ -112,6 +119,7 @@ python scripts/run_torch_pipeline.py --skip-install --data-root data/CMAPSSData 
 ```
 
 ### Useful controls
+- `--normalization-mode`
 - `--min-hidden-layers` / `--max-hidden-layers`
 - `--min-neurons` / `--max-neurons`
 - `--activation-choices`
