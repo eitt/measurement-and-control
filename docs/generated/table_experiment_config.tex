@@ -1,0 +1,28 @@
+\begin{table}[H]
+    \centering
+    \caption{Common experimental configuration used by the measurement-only ANN + PSO + pruning study.}
+    \label{tab:experiment_config}
+    \begin{tabular}{ll}
+        \toprule
+        \textbf{Setting} & \textbf{Value} \\
+        \midrule
+        Normalization & global\_standard \\
+        Sequence length & 30 \\
+        RUL clip & 125 \\
+        Validation split & 0.20 \\
+        Training fraction & 0.30 \\
+        PSO particles & 5 \\
+        PSO iterations & 10 \\
+        Stage 1 epochs & 10 \\
+        Stage 1 patience & 3 \\
+        Top-k candidates & 3 \\
+        Stage 3 tuning epochs & 120 \\
+        Stage 3 tuning patience & 12 \\
+        Final retraining epochs & 100 \\
+        Pruning keep fraction & 0.10 \\
+        Calibration subset size & 16 \\
+        MILP time limit (s) & 30.0 \\
+        Two-layer pruning strategy & reduced neighborhood \\
+        \bottomrule
+    \end{tabular}
+\end{table}

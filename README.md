@@ -1,129 +1,62 @@
-# Universal CMAPSS RUL Prediction & Robust FOPID Control
+# Universal CMAPSS RUL Measurement Pipelines
 
-This project implements a comprehensive framework for **Remaining Useful Life (RUL)** prediction across all four NASA CMAPSS jet engine datasets (`FD001` through `FD004`). It integrates a Particle Swarm Optimization (PSO) tuned Neural Network (MLP) for prognosis and a robust **Fractional Order PID (FOPID)** controller for system stability.
+This repository is now focused on **measurement only**: Remaining Useful Life (RUL) prediction and ANN pruning experiments on the NASA C-MAPSS benchmark. The older control-oriented FOPID component is no longer part of the active workflow.
 
-## Key Features
-* ** Multi-Dataset Analysis:** Automatically loops through and processes `FD001`, `FD002`, `FD003`, and `FD004` to compare performance across varying operating conditions and fault modes.
-* **PSO-Optimized Architectures:** Uses Particle Swarm Optimization to dynamically find the optimal hidden layer structure for the Neural Network based on the complexity of each dataset.
-* **Robust FOPID Control:** Implements a fractional calculus controller with stability safeguards (handling complex number errors) to simulate engine control response based on RUL predictions.
-* **Computational Benchmarking:** Tracks and visualizes the training vs. optimization time for each dataset.
-* **Universal Dashboard:** Automatically generates a 2x2 summary dashboard comparing MSE/MAE, error clustering, and computational efficiency.
+The package path remains `src/measurement_control/` for backward compatibility, but the maintained pipelines are measurement-focused:
+- a reusable PyTorch two-stage ANN + PSO workflow
+- an experimental PyTorch ANN + PSO + MILP pruning workflow
+- a lightweight legacy scikit-learn baseline in `main_universal.py`
 
-## Datasets (NASA CMAPSS)The project models and synthesizes the following datasets:
+## Active Scope
 
-| Dataset | Train Traj. | Conditions | Fault Modes | Complexity |
-| --- | --- | --- | --- | --- |
-| **FD001** | 100 | 1 (Sea Level) | 1 (HPC) | Low |
-| **FD002** | 260 | 6 (Mixed) | 1 (HPC) | Medium |
-| **FD003** | 100 | 1 (Sea Level) | 2 (HPC, Fan) | Medium |
-| **FD004** | 248 | 6 (Mixed) | 2 (HPC, Fan) | High |
+- RUL prediction on `FD001` through `FD004`
+- architecture screening with PSO
+- selective retuning of top candidates
+- ANN pruning with MILP-based structure reduction
+- timing, validation, and official-test reporting
 
-## Data FormatInput files (`train_FD00x.txt`) are space-separated text files with 26 columns:
+## C-MAPSS Datasets
 
-1. **Unit Number**
-2. **Time (Cycles)**
-3. **Op. Setting 1**
-4. **Op. Setting 2**
-5. **Op. Setting 3**
-6. **Sensor Measurement 1**
-...
-7. **Sensor Measurement 21**
+| Dataset | Train Traj. | Conditions | Fault Modes | Practical difficulty |
+|---|---:|---:|---:|---|
+| FD001 | 100 | 1 | 1 | Baseline: single regime, single fault |
+| FD002 | 260 | 6 | 1 | Regime-shift difficulty |
+| FD003 | 100 | 1 | 2 | Multi-fault difficulty |
+| FD004 | 249 | 6 | 2 | Regime-shift plus multi-fault difficulty |
 
-## Usage###1. PrerequisitesEnsure you have the required Python libraries installed:
+The project uses the local files under `data/CMAPSSData`:
+- `train_FD00x.txt`
+- `test_FD00x.txt`
+- `RUL_FD00x.txt`
+- `readme.txt`
 
-```bash
-pip install -r requirements.txt
+Additional dataset details and descriptive statistics are documented in [docs/DATA_CARD.md](docs/DATA_CARD.md).
 
-```
+## Recommended Workflows
 
-### 2. SetupPlace the dataset files (`train_FD001.txt` ... `train_FD004.txt`) in the same directory as the script.
+### 1. PyTorch Two-Stage ANN + PSO
 
-### 3. ExecutionRun the universal main script to process all datasets and generate reports:
-
-```bash
-python main_universal.py
-
-```
-
-### 4. OutputsThe script generates the following analysis files:
-
-* `universal_dashboard.png`: A 2x2 Summary of Global Performance (MSE/MAE trends and Error Clustering).
-* `universal_time_analysis.png`: Bar chart comparing computational cost across datasets.
-* `universal_fopid_convergence.png`: Optimization curve for the control parameters.
-* Console Logs: Real-time training metrics and architectural choices.
-
-## Methodology
-### 1. RUL Prediction (MLP + PSO)* **Preprocessing:** MinMax Scaling, Sequence generation (window size: 30), and feature selection.
-* **Architecture Search:** A PSO algorithm explores the hyperparameter space (hidden neurons) to minimize validation MSE.
-* **Training:** The best architecture found is retrained on the full training set.
-
-### 2. Control System (FOPID)
-* **Simulation:** Simulates a plant response using a Fractional Order PID controller: C(s) = K_p + K_i s^{-\lambda} + K_d s^{\mu}.
-* **Robustness:** Mathematical safeguards (`abs()` and `sign()`) prevent complex number instability during fractional differentiation.
-
-## Reference
-A. Saxena, K. Goebel, D. Simon, and N. Eklund, “Damage Propagation Modeling for Aircraft Engine Run-to-Failure Simulation”, in the Proceedings of the 1st International Conference on Prognostics and Health Management (PHM08), Denver CO, Oct 2008.
-
-## Organized Layout (New)
-- `src/measurement_control/`: reusable pipeline code.
-- `scripts/`: runnable entrypoint scripts.
-- `docs/`: project documentation and organization notes.
-- `outputs/`: generated artifacts from newer pipelines.
-
-Detailed structure notes are available in `docs/PROJECT_STRUCTURE.md`.
-
-## PyTorch Two-Stage Workflow
-The reusable ANN + PSO pipeline now lives in:
 - Module: `src/measurement_control/torch_rul_pso.py`
-- Entrypoint: `scripts/run_torch_pipeline.py`
+- Wrapper: `scripts/run_torch_pipeline.py`
 
-The workflow is intentionally split into two stages:
-1. **Stage 1: low-fidelity PSO screening**
-   - PSO searches ANN structure under a small common training budget.
-   - Candidates are ranked by `validation_mse + lambda_complexity * complexity_penalty`.
-   - This stage is for reducing the architecture search space, not for claiming a final global optimum.
-2. **Stage 2: selective retuning**
-   - Only the top-k Stage 1 structures are retrained with a larger budget.
-   - Learning rate, batch size, weight decay, and activation can be tuned here.
-   - The final model is selected from these retuned candidates.
-3. **Final evaluation**
-   - The official CMAPSS test split is evaluated only once for the final selected model.
+This is the main reusable architecture-screening workflow:
+1. Stage 1 uses PSO under a shared low-cost training budget to screen ANN structures.
+2. Stage 2 fully retrains only the top-k candidates.
+3. The final selected model is retrained on the full official training split.
+4. The official NASA test split is evaluated once at the end.
 
-### Split Protocol
-- The official NASA benchmark split is preserved: `train_FD00x.txt` is used for model development and `test_FD00x.txt` plus `RUL_FD00x.txt` are used only for the final benchmark evaluation.
-- Inside the official training split, the reusable PyTorch pipeline creates an internal validation partition at the **engine-unit level**, not at the rolling-window level.
-- This means all windows from one engine stay together in either the search/train portion or the validation portion, which avoids leakage between highly overlapping windows from the same trajectory.
-- After Stage 1 screening and Stage 2 retuning, the selected model is retrained on the full official training split and evaluated once on the official test split.
-- This protocol is intended to stay comparable with papers that report results on the official C-MAPSS test split while still keeping a clean validation set for architecture search and tuning.
+Example:
 
-### Normalization Protocol
-- The default normalization mode is `global_standard`.
-- In this mode, a `StandardScaler` is fit on training data only and then applied consistently to validation and official test samples.
-- For Stage 1 and Stage 2 model selection, the scaler is fit on the internal search/train engines only. For the final benchmark run, it is refit on the full official training split and then applied to the official test split.
-- This choice keeps a common sensor reference frame across engines and avoids relying on per-engine minima and maxima from truncated test trajectories.
-- The pipeline also supports `global_minmax` and `per_unit_minmax` through `--normalization-mode`, but `global_standard` is the recommended default because it is less sensitive to outliers than global min-max scaling and more deployment-consistent than per-unit min-max scaling.
-
-### Run the full experiment
 ```bash
 python scripts/run_torch_pipeline.py --skip-install --data-root data/CMAPSSData
 ```
 
-If you want the wrapper to bootstrap dependencies first:
-```bash
-python scripts/run_torch_pipeline.py --data-root data/CMAPSSData
-```
-
-### Example reproducible screening + retuning run
-```bash
-python scripts/run_torch_pipeline.py --skip-install --data-root data/CMAPSSData --datasets FD001 --n-particles 20 --n-iter 5 --low-fidelity-epochs 15 --top-k 3 --full-tuning-epochs 100 --final-train-epochs 100 --complexity-penalty-weight 0.1
-```
-
-### Useful controls
+Useful controls:
 - `--normalization-mode`
 - `--min-hidden-layers` / `--max-hidden-layers`
 - `--min-neurons` / `--max-neurons`
 - `--activation-choices`
-- `--n-particles` / `--n-iter` / `--pso-inertia` / `--pso-c1` / `--pso-c2`
+- `--n-particles` / `--n-iter`
 - `--low-fidelity-epochs` / `--low-fidelity-patience`
 - `--top-k`
 - `--full-tuning-epochs` / `--full-tuning-patience`
@@ -136,50 +69,56 @@ Current main-workflow defaults:
 - `20` PSO particles
 - `2` to `3` hidden layers
 - `10` to `100` neurons per hidden layer
+- `global_standard` normalization
 
-### Outputs
-Each dataset run writes:
+Outputs:
 - `outputs/torch_pytorch/torch_rul_summary.csv`
 - `outputs/torch_pytorch/torch_two_stage_report_<DATASET>.json`
 - `outputs/torch_pytorch/fig_torch_mlp_convergence_<DATASET>.png`
 - `outputs/torch_pytorch/fig_torch_rul_prediction_<DATASET>.png`
 
-## Experimental MILP Pruning Workflow
-An alternate experimental pipeline is available for testing ANN pruning after Stage 1 architecture screening:
+### 2. Experimental PyTorch ANN + PSO + MILP Pruning
+
 - Module: `src/measurement_control/torch_rul_pso_milp_pruning.py`
-- Entrypoint: `scripts/run_torch_milp_pruning_pipeline.py`
+- Wrapper: `scripts/run_torch_milp_pruning_pipeline.py`
 
-This variant keeps the official NASA train/test split and uses:
-- ReLU ANNs with `1` to `2` hidden layers and `10` to `100` neurons per layer
-- a default `50`-particle PSO screen in this pruning branch
-- Stage 1 PSO screening on the dense architecture
-- Stage 2 cheap dense reference fits and MILP pruning for the top-k PSO candidates
-- Stage 3 tuning of the pruned candidates only
-- final selection by validation performance plus complexity penalty
-- side-by-side dense vs pruned timing and official-test metrics for the selected architecture
-- a default `--training-fraction 0.3` development mode so this experimental branch uses more signal than the old 10% fast screen without forcing a full-data run by default
-- Stage 3 also stores per-epoch training loss and validation-MSE histories for the top-k pruned candidates
-- by default the pruning runner evaluates all four CMAPSS subsets: `FD001`, `FD002`, `FD003`, and `FD004`
+This branch extends the measurement workflow with pruning:
+1. Stage 1 runs PSO to screen dense ANN structures.
+2. The top-k candidates are converted into dense reference models.
+3. A pruning optimization stage removes arcs while preserving dense-model behavior on a calibration subset.
+4. The pruned candidates are fine-tuned and compared on validation data.
+5. The final selected architecture is evaluated on the official NASA test split.
 
-Important limitation:
-- This is a tractable approximation of the pruning idea, not a full large-scale MIQP implementation. The pruning MILP uses a linear teacher-matching objective on a calibration subset so it can be solved with the local SciPy/HiGHS stack.
-- The `training_fraction` subsamples windowed training, validation, and full-training sets only inside this pruning branch. The official NASA test split remains untouched.
-- The current pruning defaults are intentionally less brittle on FD002 and FD003 than the earlier fast setup: `training_fraction=0.3`, `tuning_learning_rates=(1e-3, 5e-4, 3e-4)`, `tuning_weight_decays=(0.0, 1e-5, 1e-4)`, `full_tuning_epochs=120`, `full_tuning_patience=12`, `pruning_finetune_epochs=80`, and `pruning_finetune_patience=10`. For a final full-data run, set `--training-fraction 1.0`.
-- The candidate-comparison artifacts now include a per-dataset CSV and a small plot summarizing top-k validation performance and candidate runtime.
-- Exact MILP pruning is now implemented for both `1`- and `2`-hidden-layer candidates. If the solver reaches the time limit or does not return a solution, the branch falls back to a transparent global magnitude-pruning mask so the run can still complete end to end.
-- To avoid benchmark leakage, the branch stores training and validation learning curves during Stage 3 and reserves the official test split for one final evaluation only.
+Important notes:
+- This is still a measurement workflow. There is no control-stage optimization.
+- Exact MILP pruning is implemented for `1`- and `2`-hidden-layer candidates.
+- For `2` hidden layers, the default strategy is a reduced-neighborhood exact MILP seeded by an activation-aware local-search heuristic.
+- The default pruning branch evaluates all four subsets: `FD001`, `FD002`, `FD003`, and `FD004`.
+- The default `training_fraction=0.3` is a development compromise. Use `--training-fraction 1.0` for a full-data run.
 
-Example run:
+Example:
+
 ```bash
-python scripts/run_torch_milp_pruning_pipeline.py --skip-install --data-root data/CMAPSSData --normalization-mode global_standard
+python scripts/run_torch_milp_pruning_pipeline.py --skip-install --data-root data/CMAPSSData
 ```
 
-Direct module-file execution also works now:
+Direct module execution also works:
+
 ```bash
 python src/measurement_control/torch_rul_pso_milp_pruning.py --data-root data/CMAPSSData
 ```
 
-Outputs include:
+Current pruning-workflow defaults:
+- `50` PSO particles
+- `1` to `2` hidden layers
+- `10` to `100` neurons per hidden layer
+- `training_fraction=0.3`
+- `full_tuning_epochs=120`
+- `full_tuning_patience=12`
+- `pruning_finetune_epochs=80`
+- `pruning_finetune_patience=10`
+
+Outputs:
 - `outputs/torch_pytorch_milp_pruning/torch_milp_pruning_summary.csv`
 - `outputs/torch_pytorch_milp_pruning/torch_milp_pruning_before_after_summary.csv`
 - `outputs/torch_pytorch_milp_pruning/torch_milp_pruning_before_after_summary.md`
@@ -189,3 +128,70 @@ Outputs include:
 - `outputs/torch_pytorch_milp_pruning/fig_torch_milp_pruning_candidates_<DATASET>.png`
 - `outputs/torch_pytorch_milp_pruning/fig_torch_milp_pruning_histories_<DATASET>.png`
 - dense and pruned official-test prediction plots
+
+Additional pruning-model notes:
+- [docs/PRUNING_OPTIMIZATION_MODEL.md](docs/PRUNING_OPTIMIZATION_MODEL.md)
+
+### 3. Legacy scikit-learn Baseline
+
+- Script: `main_universal.py`
+
+This script is now a simple measurement-only baseline. It:
+- loads `train_FD001` through `train_FD004`
+- builds windowed RUL samples
+- screens shallow MLP sizes with a lightweight PSO loop
+- trains a final scikit-learn `MLPRegressor`
+- generates a dashboard and timing plot
+
+Run:
+
+```bash
+python main_universal.py
+```
+
+Outputs:
+- `universal_dashboard.png`
+- `universal_time_analysis.png`
+
+## Split Protocol
+
+- The official NASA benchmark split is preserved.
+- `train_FD00x.txt` is used for development.
+- `test_FD00x.txt` plus `RUL_FD00x.txt` are reserved for final benchmark evaluation.
+- The PyTorch pipelines create an internal validation split only inside the official training set, at the **engine level**, not the window level.
+- The official test set is touched only once for the final selected model.
+
+## Normalization Protocol
+
+- The recommended default is `global_standard`.
+- A training-derived scaler is fit on development data and then applied consistently to validation and official-test data.
+- This avoids the train/test mismatch introduced by per-engine min-max scaling on truncated test trajectories.
+- `global_minmax` and `per_unit_minmax` remain available for controlled comparisons.
+
+## Feature Scope
+
+- `docs/DATA_CARD.md` documents the raw 26-column C-MAPSS schema.
+- The legacy baseline uses a fixed literature-aligned 10-sensor subset for comparability.
+- The reusable PyTorch pipeline keeps a measurement-focused feature space while handling the multi-regime subsets more carefully than the old baseline.
+
+## Package Layout
+
+- `src/measurement_control/`: reusable measurement pipelines
+- `scripts/`: thin CLI wrappers
+- `docs/`: dataset and pruning-method notes
+- `data/CMAPSSData/`: local NASA benchmark files
+- `outputs/`: generated experiment artifacts
+
+## Paper Asset Regeneration
+
+The paper figures and LaTeX table snippets for [docs/article.tex](docs/article.tex) can be regenerated from the pruning outputs with:
+
+```bash
+python scripts/generate_article_assets.py
+```
+
+This writes combined figures and table snippets into `docs/generated/` so the article uses reproducible assets rather than manually copied numbers or screenshots.
+
+## Reference
+
+A. Saxena, K. Goebel, D. Simon, and N. Eklund, “Damage Propagation Modeling for Aircraft Engine Run-to-Failure Simulation,” Proceedings of PHM08, Denver, Colorado, October 2008.

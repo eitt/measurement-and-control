@@ -4,6 +4,8 @@
 
 This data card documents the local copy of the NASA Commercial Modular Aero-Propulsion System Simulation (C-MAPSS) benchmark stored under `data/CMAPSSData`. The benchmark contains multivariate run-to-failure trajectories for turbofan engines and is widely used for Remaining Useful Life (RUL) prediction.
 
+In the current repository scope, these files support the measurement-only RUL pipelines and pruning experiments. They are no longer coupled to the older control-oriented project framing.
+
 - **Source:** [NASA Open Data Portal](https://data.nasa.gov/dataset/cmapss-jet-engine-simulated-data)
 - **Local files:** `train_FD001..004.txt`, `test_FD001..004.txt`, `RUL_FD001..004.txt`, `readme.txt`
 - **Generator:** Commercial Modular Aero-Propulsion System Simulation (C-MAPSS)

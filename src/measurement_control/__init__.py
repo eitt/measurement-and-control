@@ -1,7 +1,8 @@
 """
-Top-level package for organized Measurement and Control utilities.
+Top-level package for measurement-focused CMAPSS utilities.
 
-This package currently exposes the PyTorch RUL + PSO pipeline.
+The package path is preserved for backward compatibility, but the maintained
+workflows in this repository are now RUL measurement pipelines.
 """
 
 from .torch_rul_pso import (

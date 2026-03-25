@@ -1,0 +1,16 @@
+\begin{table}[H]
+    \centering
+    \caption{Selected dense topologies and resulting pruning compression for each subset. The reported pruning method corresponds to the final structure actually used in the selected candidate.}
+    \label{tab:topology_summary}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{lrrrrrrl}
+        \toprule
+        \textbf{Dataset} & \textbf{Layers} & \textbf{Widths} & \textbf{Dense Params.} & \textbf{Nonzero Params.} & \textbf{Active Arcs} & \textbf{Keep Ratio} & \textbf{Method} \\
+        \midrule
+        FD001 & 2 & 98-87 & 38199 & 3987 & 3801 & 0.100 & Fallback magnitude \\
+        FD002 & 2 & 100-23 & 41447 & 4256 & 4132 & 0.100 & Fallback magnitude \\
+        FD003 & 2 & 100-25 & 32651 & 3378 & 3252 & 0.100 & Fallback magnitude \\
+        FD004 & 2 & 100-17 & 40835 & 4190 & 4072 & 0.100 & Fallback magnitude \\
+        \bottomrule
+    \end{tabular}}
+\end{table}

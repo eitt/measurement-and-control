@@ -44,6 +44,15 @@ For the run-to-failure training trajectories, the target Remaining Useful Life i
 \end{equation}
 In the implementation, $R_{\max}=125$ cycles. For the official test split, the benchmark-provided RUL labels are used only after model selection is complete.
 
+Equation~\eqref{eq:rul_cap} can be interpreted with a simple example. Suppose an engine fails at cycle $C_i^{\max}=220$. Its uncapped target at cycle $c=20$ would be $220-20=200$, but the capped target becomes $\min(200,125)=125$. At cycle $c=170$, the uncapped target is $50$, which remains unchanged because it is already below the cap. Thus, the piecewise-linear target preserves a long constant plateau during the healthy phase and then transitions into a linear countdown near failure, which reduces the tendency of the model to over-emphasize very early cycles that carry weak degradation information.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.78\textwidth]{generated/fig_rul_target_example.png}
+    \caption{Illustrative capped RUL target for one synthetic run-to-failure trajectory. The plateau corresponds to the capped healthy phase, while the descending branch represents the linear countdown near failure.}
+    \label{fig:rul_target_example}
+\end{figure}
+
 \subsubsection{Sliding-Window Construction and Flattened Temporal Embeddings}
 To encode short-term degradation dynamics without recurrent layers, each engine trajectory is transformed into overlapping fixed-length windows. With a window length $L=30$ and $d$ retained variables after feature filtering, the input associated with unit $i$ and cycle $t$ is
 \begin{equation}
@@ -58,10 +67,21 @@ To encode short-term degradation dynamics without recurrent layers, each engine 
 \end{equation}
 and its target is the capped RUL value at the final cycle of the window. All admissible rolling windows are used for model development. For the official test split, a single sample is constructed per engine from the last available window. If a test trajectory is shorter than $L$, the first normalized observation is repeated on the left so that every engine yields one fixed-size input vector.
 
-\subsubsection{Two-Stage ANN Screening, Selective Retuning, and Final Evaluation}
-The prognostic model is a fully connected feed-forward regressor with configurable depth, width, and activation function. The implementation keeps these choices in a single parameter block so that the full experiment can be reproduced from one configuration. In the reference settings, the architecture search is restricted to one or two hidden layers with 10--100 neurons per layer, and training uses the Adam optimizer with mean squared error as the loss.
+To make Eq.~\eqref{eq:window_embedding} concrete, consider a window length of $L=5$ and a retained feature set of size $d=4$. The input to the ANN at cycle $t$ is then not a single $4$-dimensional observation, but a $5\times 4$ temporal block containing the normalized measurements from cycles $t-4$ through $t$. This block is flattened row by row into a single vector of length $Ld=20$. The ANN therefore receives a short explicit time-delay embedding: the most recent cycle is placed at the end of the vector, while the earlier rows preserve the immediate degradation trend seen over the previous four cycles.
 
-The optimization workflow is explicitly divided into two stages. In Stage 1, PSO is used only as a low-cost structural screening mechanism. The official NASA train/test partition is preserved, and model selection is performed only inside the official training split. More specifically, the engine units in \texttt{train\_FD00x.txt} are divided into internal training and validation groups using a fixed random seed before rolling windows are constructed, so that all windows from a given engine remain on one side of the split. This choice avoids leakage between highly overlapping windows from the same trajectory while preserving comparability with papers that report final results on the official benchmark test split. Each particle is decoded into a discrete ANN architecture by rounding and clipping the continuous position vector to the configured bounds. Candidate models are trained under a common reduced budget (15 epochs by default, with early stopping patience of 5 epochs), and their low-fidelity objective is defined as
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{generated/fig_window_embedding_example.png}
+    \caption{Illustrative construction of the flattened sliding-window embedding. A short matrix of normalized measurements is stacked over the last $L$ cycles and then reshaped into a single ANN input vector.}
+    \label{fig:window_embedding_example}
+\end{figure}
+
+\subsubsection{PSO Screening, MILP-Guided Pruning, and Final Evaluation}
+The reported experiments use the measurement-only pruning branch built around a configurable feed-forward regressor. In the current configuration, the search space allows one or two hidden layers with 10--100 neurons per layer, ReLU activations, and an Adam optimizer. To keep the exact pruning stage computationally tractable while still using enough variation for meaningful model selection, the present study uses a development fraction of 0.3 from the windowed training and validation samples. The shared experimental settings used to produce the figures and tables in this manuscript are summarized in Table~\ref{tab:experiment_config}.
+
+\input{generated/table_experiment_config.tex}
+
+The workflow is explicitly divided into three model-selection stages plus one final benchmark stage. In Stage 1, PSO is used only as a low-cost structural screening mechanism. The official NASA train/test partition is preserved, and model selection is performed only inside the official training split. More specifically, the engine units in \texttt{train\_FD00x.txt} are divided into internal training and validation groups using a fixed random seed before rolling windows are constructed, so that all windows from a given engine remain on one side of the split. This choice avoids leakage between highly overlapping windows from the same trajectory while preserving comparability with papers that report final results on the official benchmark test split. Each particle is decoded into a discrete ANN architecture by rounding and clipping the continuous position vector to the configured bounds. Candidate models are trained under a common reduced budget, and their low-fidelity objective is defined as
 \begin{equation}
     J_{\mathrm{LF}} = \mathrm{MSE}_{\mathrm{val}} + \lambda_{\mathrm{comp}}\,P_{\mathrm{comp}},
     \label{eq:low_fidelity_objective}
@@ -71,20 +91,170 @@ with
     P_{\mathrm{comp}} = N_{\mathrm{layers}} + \frac{N_{\mathrm{params}}}{1000}.
     \label{eq:complexity_penalty}
 \end{equation}
-Here, $\mathrm{MSE}_{\mathrm{val}}$ is the validation mean squared error, $N_{\mathrm{layers}}$ is the number of hidden layers, and $N_{\mathrm{params}}$ is the number of trainable parameters. The complexity term discourages larger architectures unless they deliver meaningful validation gains. The default PSO configuration is inertia-based, with 5 particles, 5 iterations, inertia $w=0.5$, and acceleration coefficients $c_1=c_2=1.5$. Invalid candidates are logged and assigned infinite cost rather than interrupting the search. Under this design, PSO is not used to claim final global optimality; instead, it serves to reduce the structural search space at low computational cost.
+Here, $\mathrm{MSE}_{\mathrm{val}}$ is the validation mean squared error, $N_{\mathrm{layers}}$ is the number of hidden layers, and $N_{\mathrm{params}}$ is the number of trainable parameters. The complexity term discourages larger architectures unless they deliver meaningful validation gains. Under this design, PSO is not used to claim final global optimality; instead, it serves to reduce the structural search space at low computational cost.
 
-In Stage 2, only the top-$k$ Stage 1 structures (3 by default) are retrained with a larger budget and a small tuning grid over learning rate, batch size, weight decay, and, if enabled, activation function. This second stage uses a longer training horizon (100 epochs by default, with patience 15) and may repeat each shortlisted configuration across multiple seeds to stabilize selection, while avoiding the cost of exhaustively tuning every architecture visited by the swarm. The same complexity-aware score is used to rank the retuned candidates. Finally, the selected ANN is retrained on the full official training split and evaluated once on the official test split. This sequencing prevents information leakage from the test set into architecture search, preserves the original NASA benchmark structure, and makes the methodological claim explicit: PSO is used as a computationally efficient first-stage filter, whereas final model selection is based on selective retraining and tuning of only the most promising ANN structures. The complete protocol is summarized in Algorithm~\ref{alg:two_stage_ann_pso}.
+In Stage 2, only the top-$k$ Stage 1 structures are converted into cheap dense reference models and passed to the pruning stage. The pruning optimization does not directly minimize final RUL loss on the validation or test split. Instead, it operates on a small calibration subset and minimizes the absolute deviation between the pruned ANN output $y^n$ and the dense teacher output $\hat{y}^n$:
+\begin{equation}
+    \min \sum_{n=1}^{N} e^n
+    \label{eq:pruning_teacher_objective}
+\end{equation}
+subject to
+\begin{equation}
+    e^n \ge y^n - \hat{y}^n, \qquad
+    e^n \ge -(y^n - \hat{y}^n), \qquad
+    e^n \ge 0.
+    \label{eq:pruning_absolute_error}
+\end{equation}
+For one-hidden-layer networks, the arc-selection problem is solved as an exact MILP with a standard big-$M$ ReLU linearization. For two-hidden-layer networks, the default strategy first constructs an activation-aware heuristic mask, improves it with a bounded local search, fixes obviously active or inactive arcs, and then solves a reduced-neighborhood exact MILP over the remaining free binaries. If the local solver does not return a feasible incumbent within the time limit, the workflow falls back to a transparent magnitude-based pruning mask so that the end-to-end experiment still completes reproducibly.
+
+In Stage 3, the pruned candidates are fine-tuned with a larger gradient-based budget and ranked on the same held-out validation engines. This stage is distinct from Stage 2: the pruning model reduces structure on a calibration subset, whereas Stage 3 re-optimizes predictive performance under the validation protocol used for model selection. Finally, the selected architecture is retrained in two forms on the full official training split: a dense reference ANN and its pruned counterpart. The official benchmark test split is then evaluated once for those final dense and pruned models. This sequencing makes the methodological claim explicit: PSO reduces the structural search space cheaply, pruning reduces structural redundancy on shortlisted candidates, and final model comparison is still based on validation-driven selection followed by one-time official-test evaluation. The complete protocol is summarized in Algorithm~\ref{alg:two_stage_ann_pso}.
+
+\subsubsection{Pruning Optimization Model}
+The pruning stage is formulated as a teacher-matching mixed-integer optimization problem over a calibration subset. Let $\mathcal{N}=\{1,\dots,N\}$ index calibration samples, $\mathcal{I}=\{1,\dots,d\}$ the flattened input features, $\mathcal{H}_1=\{1,\dots,H_1\}$ the first hidden layer, $\mathcal{H}_2=\{1,\dots,H_2\}$ the optional second hidden layer, and $\mathcal{O}=\{1\}$ the scalar RUL output. For each sample $n\in\mathcal{N}$, let $x_i^n$ denote input feature $i$ and let $\hat{y}^n$ denote the output of the dense reference ANN on the same sample. The dense reference weights and biases are treated as fixed data. For one-hidden-layer networks these parameters are $\{W^{(1)},b^{(1)},W^{(2)},b^{(2)}\}$; for two-hidden-layer networks they are $\{W^{(1)},b^{(1)},W^{(2)},b^{(2)},W^{(3)},b^{(3)}\}$. Valid lower and upper bounds for each pre-activation and hidden activation are computed offline from the dense network and the calibration subset and are denoted generically by $L$ and $U$.
+
+Binary arc-selection variables indicate whether each dense connection is preserved in the sparse network. For the one-hidden-layer case,
+\begin{equation}
+    z_{ji}^{(1)} \in \{0,1\}, \qquad j\in\mathcal{H}_1,\ i\in\mathcal{I},
+\end{equation}
+\begin{equation}
+    z_{j}^{(2)} \in \{0,1\}, \qquad j\in\mathcal{H}_1,
+\end{equation}
+where $z_{ji}^{(1)}=1$ keeps input-hidden arc $(i,j)$ and $z_j^{(2)}=1$ keeps hidden-output arc $(j,1)$. For two-hidden-layer networks, an additional family
+\begin{equation}
+    z_{kj}^{(2)} \in \{0,1\}, \qquad k\in\mathcal{H}_2,\ j\in\mathcal{H}_1,
+\end{equation}
+is introduced for first-hidden to second-hidden arcs, while the output-arc variables become
+\begin{equation}
+    z_{k}^{(3)} \in \{0,1\}, \qquad k\in\mathcal{H}_2.
+\end{equation}
+Continuous variables represent pre-activations $a$, post-ReLU activations $h$, auxiliary products $q$, predicted outputs $y^n$, and absolute teacher-matching errors $e^n\ge 0$. Binary variables $\delta$ encode the active branch of each ReLU unit.
+
+The common objective minimizes the deviation between the pruned network and the dense teacher:
+\begin{equation}
+    \min \sum_{n\in\mathcal{N}} e^n.
+    \label{eq:pruning_milp_objective}
+\end{equation}
+For each sample $n$, the absolute-deviation linearization is
+\begin{equation}
+    e^n \ge y^n - \hat{y}^n, \qquad
+    e^n \ge -\left(y^n - \hat{y}^n\right), \qquad
+    e^n \ge 0.
+    \label{eq:pruning_milp_abs}
+\end{equation}
+
+For a one-hidden-layer ReLU ANN, the exact MILP is:
+\begin{equation}
+    a_{j}^{n,1} = \sum_{i\in\mathcal{I}} W_{ji}^{(1)} x_i^n z_{ji}^{(1)} + b_j^{(1)},
+    \qquad n\in\mathcal{N},\ j\in\mathcal{H}_1,
+    \label{eq:pruning_one_layer_affine}
+\end{equation}
+\begin{equation}
+    h_{j}^{n,1} \ge a_{j}^{n,1}, \qquad
+    h_{j}^{n,1} \ge 0,
+    \label{eq:pruning_one_layer_relu_lower}
+\end{equation}
+\begin{equation}
+    h_{j}^{n,1} \le a_{j}^{n,1} - L_{j}^{n,1}\left(1-\delta_{j}^{n,1}\right), \qquad
+    h_{j}^{n,1} \le U_{j}^{n,1}\delta_{j}^{n,1},
+    \label{eq:pruning_one_layer_relu_upper}
+\end{equation}
+\begin{equation}
+    0 \le q_j^n \le U_{j}^{n,1} z_j^{(2)}, \qquad
+    q_j^n \le h_{j}^{n,1}, \qquad
+    q_j^n \ge h_{j}^{n,1} - U_{j}^{n,1}\left(1-z_j^{(2)}\right),
+    \label{eq:pruning_one_layer_product}
+\end{equation}
+\begin{equation}
+    y^n = \sum_{j\in\mathcal{H}_1} W_{j}^{(2)} q_j^n + b^{(2)},
+    \qquad n\in\mathcal{N}.
+    \label{eq:pruning_one_layer_output}
+\end{equation}
+The auxiliary variable $q_j^n$ linearizes the product between the hidden activation and the binary decision that keeps or removes the outgoing arc.
+
+The two-hidden-layer exact model extends these equations by introducing a second ReLU block:
+\begin{equation}
+    a_{k}^{n,2} = \sum_{j\in\mathcal{H}_1} W_{kj}^{(2)} q_{kj}^{n,12} + b_k^{(2)},
+    \qquad n\in\mathcal{N},\ k\in\mathcal{H}_2,
+    \label{eq:pruning_two_layer_affine}
+\end{equation}
+\begin{equation}
+    0 \le q_{kj}^{n,12} \le U_{j}^{n,1} z_{kj}^{(2)}, \qquad
+    q_{kj}^{n,12} \le h_j^{n,1}, \qquad
+    q_{kj}^{n,12} \ge h_j^{n,1} - U_{j}^{n,1}\left(1-z_{kj}^{(2)}\right),
+    \label{eq:pruning_two_layer_product12}
+\end{equation}
+\begin{equation}
+    h_{k}^{n,2} \ge a_{k}^{n,2}, \qquad
+    h_{k}^{n,2} \ge 0,
+    \label{eq:pruning_two_layer_relu_lower}
+\end{equation}
+\begin{equation}
+    h_{k}^{n,2} \le a_{k}^{n,2} - L_{k}^{n,2}\left(1-\delta_{k}^{n,2}\right), \qquad
+    h_{k}^{n,2} \le U_{k}^{n,2}\delta_{k}^{n,2},
+    \label{eq:pruning_two_layer_relu_upper}
+\end{equation}
+\begin{equation}
+    0 \le q_k^{n,3} \le U_{k}^{n,2} z_k^{(3)}, \qquad
+    q_k^{n,3} \le h_k^{n,2}, \qquad
+    q_k^{n,3} \ge h_k^{n,2} - U_{k}^{n,2}\left(1-z_k^{(3)}\right),
+    \label{eq:pruning_two_layer_product23}
+\end{equation}
+\begin{equation}
+    y^n = \sum_{k\in\mathcal{H}_2} W_{k}^{(3)} q_k^{n,3} + b^{(3)},
+    \qquad n\in\mathcal{N}.
+    \label{eq:pruning_two_layer_output}
+\end{equation}
+
+Let $\mathcal{A}$ denote the full set of dense arcs. With pruning ratio $\alpha\in(0,1)$, the kept-arc budget is controlled by
+\begin{equation}
+    \sum_{a\in\mathcal{A}} z_a \le (1-\alpha)\,|\mathcal{A}|,
+    \label{eq:pruning_budget}
+\end{equation}
+or by equality when an exact keep budget is required. In the current experiments, the pruning branch fixes a target keep ratio and applies Eq.~\eqref{eq:pruning_budget} accordingly.
+
+For two-hidden-layer networks, the full exact MILP is often too large for the available time budget. The implemented reduced-neighborhood strategy therefore first constructs an activation-aware heuristic mask and partitions the arc set into three groups: arcs fixed to keep, $\mathcal{A}_{\mathrm{keep}}$; arcs fixed to drop, $\mathcal{A}_{\mathrm{drop}}$; and uncertain arcs, $\mathcal{A}_{\mathrm{free}}$. The exact model is then solved only over $\mathcal{A}_{\mathrm{free}}$, with
+\begin{equation}
+    z_a = 1 \quad \forall a\in\mathcal{A}_{\mathrm{keep}}, \qquad
+    z_a = 0 \quad \forall a\in\mathcal{A}_{\mathrm{drop}},
+    \label{eq:reduced_neighborhood_fixings}
+\end{equation}
+while the remaining binaries still satisfy the same activation and budget constraints. This matheuristic strategy preserves the structure of the exact model but concentrates the branch-and-bound effort on a smaller neighborhood around a strong activation-aware seed.
+
+The heuristic seed is not purely magnitude-based. For each dense layer $\ell$, let $u_{i}^{n,\ell-1}$ denote the incoming activation to coordinate $i$ for calibration sample $n$, and define the mean absolute incoming activation
+\begin{equation}
+    \bar{u}_{i}^{\ell-1}=\frac{1}{N}\sum_{n\in\mathcal{N}}\left|u_{i}^{n,\ell-1}\right|.
+    \label{eq:activation_mean}
+\end{equation}
+The activation-aware score of arc $(i,j)$ in layer $\ell$ is then
+\begin{equation}
+    s_{ji}^{(\ell)}=\left|W_{ji}^{(\ell)}\right|\,\bar{u}_{i}^{\ell-1}.
+    \label{eq:activation_aware_score}
+\end{equation}
+These scores are flattened across all prunable layers and sorted globally. If $K$ arcs must be kept under the target pruning ratio, the initial heuristic mask $m^{(0)}$ keeps the $K$ arcs with highest $s_a$ values and drops the remainder. The local-search stage then improves this seed by same-layer swap moves that preserve the keep budget. Specifically, each round builds a candidate set from the weakest currently kept arcs and the strongest currently dropped arcs, and evaluates swaps according to the teacher-matching loss. If $a_{\mathrm{keep}}$ is an active arc and $a_{\mathrm{drop}}$ is an inactive arc from the same layer, the score gain used to prioritize the move is
+\begin{equation}
+    \Delta s = s_{a_{\mathrm{drop}}} - s_{a_{\mathrm{keep}}}.
+    \label{eq:score_gain}
+\end{equation}
+Only a bounded number of the best-ranked swaps are evaluated, and a candidate mask is accepted when it decreases the teacher-matching mean absolute error on the calibration subset.
+
+After local search, the uncertain neighborhood is defined relative to the global score threshold $\tau$ of the final keep mask. For each arc $a$,
+\begin{equation}
+    u_a = \left|s_a - \tau\right|,
+    \label{eq:uncertainty_score}
+\end{equation}
+so arcs with scores close to the threshold are the most ambiguous. The implementation also forces into $\mathcal{A}_{\mathrm{free}}$ any arcs whose state changed between the initial top-$K$ mask and the local-search-improved mask. The exact MILP then optimizes only this uncertain band, while the other arc decisions remain fixed. The main hyperparameters of this reduced-neighborhood matheuristic are summarized in Table~\ref{tab:reduced_neighborhood_params}.
+
+\input{generated/table_reduced_neighborhood_params.tex}
 
 \begin{algorithm}[H]
-\caption{Two-stage ANN screening and selective retuning for C-MAPSS RUL prediction}
+\caption{PSO screening, MILP-guided pruning, and final evaluation for C-MAPSS RUL prediction}
 \label{alg:two_stage_ann_pso}
 \begin{algorithmic}[1]
-\Require Dataset subset $D \in \{\mathrm{FD001},\mathrm{FD002},\mathrm{FD003},\mathrm{FD004}\}$, sequence length $L$, training RUL cap $R_{\max}$, feature policy, normalization mode, PSO settings, retuning settings
-\Ensure Final ANN $\mathcal{M}^{\star}$ and one-time official test metrics on $\texttt{test\_}D$
+\Require Dataset subset $D \in \{\mathrm{FD001},\mathrm{FD002},\mathrm{FD003},\mathrm{FD004}\}$, sequence length $L$, training RUL cap $R_{\max}$, feature policy, normalization mode, PSO settings, pruning settings, tuning settings
+\Ensure Final dense and pruned ANNs plus one-time official test metrics on $\texttt{test\_}D$
 \State Load $\texttt{train\_}D$ and compute capped training RUL targets using Eq.~\eqref{eq:rul_cap}
-\State Apply dataset-aware feature filtering to $\texttt{train\_}D$
+\State Apply dataset-aware feature filtering and fit the search-stage scaler on internal training engines only
 \State Split the engine units in $\texttt{train\_}D$ into internal training units and validation units
-\State Fit the search-stage scaler on the internal training units only
 \State Construct rolling windows of length $L$ for internal training and validation units using Eq.~\eqref{eq:window_embedding}
 \For{$t = 1$ to $T_{\mathrm{PSO}}$}
     \For{each particle $p$ in the swarm}
@@ -92,7 +262,7 @@ In Stage 2, only the top-$k$ Stage 1 structures (3 by default) are retrained wit
         \If{the candidate is invalid}
             \State Assign infinite objective and continue
         \EndIf
-        \State Build the ANN and train it under the low-fidelity budget
+        \State Build the ANN and train it under the low-fidelity screening budget
         \State Evaluate validation MSE on the held-out validation engines
         \State Compute $J_{\mathrm{LF}}$ using Eq.~\eqref{eq:low_fidelity_objective}
         \State Update particle-best and global-best records
@@ -101,17 +271,18 @@ In Stage 2, only the top-$k$ Stage 1 structures (3 by default) are retrained wit
 \EndFor
 \State Select the top-$k$ Stage 1 architectures according to $J_{\mathrm{LF}}$
 \For{each shortlisted architecture}
-    \For{each Stage 2 hyperparameter setting in the tuning grid}
-        \State Retrain the ANN under the larger Stage 2 budget
-        \State Evaluate it on the same held-out validation engines
-        \State Rank the run with the complexity-aware selection score
-    \EndFor
+    \State Train a cheap dense reference ANN on the internal training split
+    \State Sample a calibration subset from the internal training windows
+    \State Solve the pruning model using Eq.~\eqref{eq:pruning_teacher_objective}; if the exact two-layer solve times out, use the fallback pruning mask
+    \State Fine-tune the pruned ANN on the internal training split
+    \State Evaluate the pruned ANN on the held-out validation engines
 \EndFor
-\State Select the best retuned candidate $\mathcal{M}^{\star}$
+\State Select the best pruned candidate using the validation score
 \State Refit the feature scaler on the full official training split
-\State Rebuild all official training windows and retrain $\mathcal{M}^{\star}$ on the full official training split
+\State Retrain a final dense reference ANN on the full official training split
+\State Rebuild the selected pruning mask on the full official training split and fine-tune the final pruned ANN
 \State Load $\texttt{test\_}D$ and $\texttt{RUL\_}D$ only after model selection is complete
 \State Apply the full-training scaler to the official test split and build one final window per test engine
-\State Evaluate $\mathcal{M}^{\star}$ once on the official benchmark test split and report the final metrics
+\State Evaluate the final dense and pruned ANNs once on the official benchmark test split
 \end{algorithmic}
 \end{algorithm}

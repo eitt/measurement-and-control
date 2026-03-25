@@ -1,0 +1,111 @@
+\begin{thebibliography}{10}
+
+\bibitem{Saxena2008}
+A.~Saxena, K.~Goebel, D.~Simon, and N.~Eklund, ``Damage propagation modeling
+  for aircraft engine run-to-failure simulation,'' in {\em 2008 International
+  Conference on Prognostics and Health Management}, pp.~1--9, IEEE, 2008.
+
+\bibitem{Lei2018Machinery}
+Y.~Lei, N.~Li, L.~Guo, N.~Li, T.~Yan, and J.~Lin, ``Machinery health
+  prognostics: A systematic review from data acquisition to rul prediction,''
+  {\em Mechanical Systems and Signal Processing}, vol.~104, pp.~799--834, 2018.
+
+\bibitem{Wu2018Remaining}
+Y.~Wu, M.~Yuan, S.~Dong, L.~Lin, and Y.~Liu, ``Remaining useful life estimation
+  of engineered systems using vanilla lstm neural networks,'' {\em
+  Neurocomputing}, vol.~275, pp.~167--179, 2018.
+
+\bibitem{Peringal2024}
+A.~Peringal {\em et~al.}, ``Temporal degradation modeling in turbofan engines
+  using recurrent networks,'' {\em IEEE Transactions on Industrial
+  Informatics}, vol.~20, no.~2, pp.~1122--1135, 2024.
+
+\bibitem{Elsherif2025}
+M.~Elsherif {\em et~al.}, ``Spatial-temporal feature extraction for remaining
+  useful life prediction via caelstm,'' {\em Reliability Engineering \& System
+  Safety}, vol.~230, p.~108923, 2025.
+
+\bibitem{Chen2024}
+Z.~Chen {\em et~al.}, ``Position-sensitive attention in transformer
+  architectures for prognostics,'' {\em Applied Soft Computing}, vol.~150,
+  p.~110123, 2024.
+
+\bibitem{Mo2021Remaining}
+Y.~Mo, Q.~Wu, X.~Li, and B.~Huang, ``Remaining useful life estimation via
+  transformer encoder with self-attention,'' {\em IEEE Transactions on
+  Instrumentation and Measurement}, vol.~70, pp.~1--10, 2021.
+
+\bibitem{Yang2020Hyperparameter}
+L.~Yang and A.~Shami, ``On hyperparameter optimization of machine learning
+  algorithms: Theory and practice,'' {\em Neurocomputing}, vol.~415,
+  pp.~295--316, 2020.
+
+\bibitem{Snoek2012Practical}
+J.~Snoek, H.~Larochelle, and R.~P. Adams, ``Practical bayesian optimization of
+  machine learning algorithms,'' in {\em Advances in Neural Information
+  Processing Systems}, vol.~25, pp.~2951--2959, 2012.
+
+\bibitem{Xue2025}
+Y.~Xue {\em et~al.}, ``Automated architecture search using bayesian
+  optimization for turbofan engine rul estimation,'' {\em Knowledge-Based
+  Systems}, vol.~290, p.~111534, 2025.
+
+\bibitem{Schwartz2020GreenAI}
+R.~Schwartz, J.~Dodge, N.~A. Smith, and O.~Etzioni, ``Green ai,'' {\em
+  Communications of the ACM}, vol.~63, no.~12, pp.~54--63, 2020.
+
+\bibitem{Strubell2019Energy}
+E.~Strubell, A.~Ganesh, and A.~McCallum, ``Energy and policy considerations for
+  deep learning in nlp,'' {\em arXiv preprint arXiv:1906.02243}, 2019.
+
+\bibitem{Garcia2019Estimation}
+E.~Garcia-Martin, C.~F. Rodrigues, G.~Riley, and H.~Grahn, ``Estimation of
+  energy consumption in machine learning,'' {\em Journal of Parallel and
+  Distributed Computing}, vol.~134, pp.~75--88, 2019.
+
+\bibitem{Dhar2021Survey}
+P.~Dhar, S.~Bhattacharya, {\em et~al.}, ``A survey on the carbon footprint of
+  deep learning formulations,'' {\em IEEE Access}, 2021.
+
+\bibitem{Wu2022Sustainable}
+C.-j. Wu {\em et~al.}, ``Sustainable ai: Environmental implications, challenges
+  and opportunities,'' {\em Patterns}, vol.~3, no.~1, 2022.
+
+\bibitem{Patterson2021Carbon}
+D.~Patterson, J.~Gonzalez, Q.~Le, C.~Liang, L.-M. Munguia, D.~Rothchild, D.~So,
+  M.~Texier, and J.~Dean, ``Carbon emissions and large neural network
+  training,'' {\em arXiv preprint arXiv:2104.10350}, 2021.
+
+\bibitem{Li2023Edge}
+J.~Li {\em et~al.}, ``Edge intelligence: Architectures, challenges, and
+  applications,'' {\em IEEE Network}, 2023.
+
+\bibitem{Merenda2020Edge}
+M.~Merenda, C.~Porcaro, and D.~Iero, ``Edge machine learning for sensor
+  networks in iot era: A review,'' {\em Sensors}, vol.~20, no.~8, p.~2275,
+  2020.
+
+\bibitem{Wang2020Convergence}
+X.~Wang, Y.~Han, V.~C. Leung, D.~Niyato, X.~Yan, and X.~Chen, ``Convergence of
+  edge computing and deep learning: A comprehensive survey,'' {\em IEEE
+  Communications Surveys \& Tutorials}, vol.~22, no.~2, pp.~869--904, 2020.
+
+\bibitem{Zhou2019Edge}
+Z.~Zhou, X.~Chen, E.~Li, L.~Zeng, K.~Luo, and J.~Zhang, ``Edge intelligence:
+  Paving the last mile of artificial intelligence with edge computing,'' {\em
+  Proceedings of the IEEE}, vol.~107, no.~8, pp.~1738--1762, 2019.
+
+\bibitem{Jiang2021Model}
+C.~Jiang {\em et~al.}, ``Model compression and edge intelligence,'' {\em IEEE
+  Internet of Things Journal}, 2021.
+
+\bibitem{Chen2019Deep}
+J.~Chen and X.~Ran, ``Deep learning with edge computing: A review,'' {\em
+  Proceedings of the IEEE}, vol.~107, no.~8, pp.~1655--1674, 2019.
+
+\bibitem{Gong2023}
+J.~Gong {\em et~al.}, ``Robust fractional-order pid controller design under
+  shifting operational regimes,'' {\em Control Engineering Practice}, vol.~130,
+  p.~105372, 2023.
+
+\end{thebibliography}

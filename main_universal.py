@@ -1,20 +1,19 @@
 """
 main_universal.py
 =================
-FULL SYSTEM: Multi-Dataset Analysis + Computational Timing + Robust FOPID
+Measurement-only legacy baseline for multi-dataset CMAPSS analysis.
+
 Features:
 - Loops through FD001, FD002, FD003, FD004 automatically.
-- Tracks Computation Time for efficiency analysis.
-- Generates the 2x2 Dashboard with REAL calculated metrics.
-- Includes Robust FOPID Control optimization.
+- Tracks computation time for architecture search plus training.
+- Generates a small dashboard with predictive metrics and timing.
+- Keeps a lightweight scikit-learn baseline alongside the newer Torch pipelines.
 """
 
 # Import necessary libraries
 import numpy as np
 import pandas as pd
 import time
-import joblib
-import json
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -172,71 +171,9 @@ def optimize_mlp_pso(X, y, n_particles=3, n_iter=3):
     best_arch = tuple(int(x) for x in g_best_pos)
     return best_arch, elapsed
 
-# --- ROBUST FOPID ---
-def simulate_fopid(params, duration=10.0, dt=0.01):
-    """
-    Simulates a Fractional-Order PID (FOPID) controller.
-    Calculates the Integral Squared Error (ISE) for a step response.
-    """
-    Kp, Ki, Kd, lam, mu = params
-    x1, x2, integ, deriv_prev, ise = 0.0, 0.0, 0.0, 0.0, 0.0
-    for _ in range(int(duration/dt)):
-        error = 1.0 - x1
-        # Fractional integral term
-        term_i = error * dt
-        integ += np.sign(term_i) * (np.abs(term_i) ** lam)
-        # Fractional derivative term
-        term_d = (error - deriv_prev) / dt
-        deriv = np.sign(term_d) * (np.abs(term_d) ** mu)
-        deriv_prev = error
-        
-        u = Kp*error + Ki*integ + Kd*deriv
-        if np.abs(u) > 1e6 or np.isnan(u): return 1e9 # Penalize instability
-        
-        # System dynamics simulation
-        x2 += (u - x1 - x2) * dt
-        x1 += x2 * dt
-        ise += (error**2)*dt
-    return ise
-
-def optimize_fopid_pso():
-    """Optimizes FOPID parameters using PSO (once to demonstrate capability)."""
-    start_time = time.time()
-    dim = 5  # Kp, Ki, Kd, lambda, mu
-    bounds = [(0, 5), (0, 2), (0, 2), (0.1, 1.9), (0.1, 1.9)]
-    particles = np.random.uniform([b[0] for b in bounds], [b[1] for b in bounds], (10, dim))
-    best_global = particles[0]
-    best_score = simulate_fopid(best_global)
-    
-    history = []
-    for _ in range(10): # 10 iterations
-        scores = np.array([simulate_fopid(p) for p in particles])
-        min_idx = np.argmin(scores)
-        if scores[min_idx] < best_score:
-            best_score = scores[min_idx]
-            best_global = particles[min_idx].copy()
-        history.append(best_score)
-        # Simple random update for demonstration
-        particles += np.random.normal(0, 0.1, particles.shape)
-        for i, b in enumerate(bounds): particles[:, i] = np.clip(particles[:, i], b[0], b[1])
-        
-    elapsed = time.time() - start_time
-    return best_global, history, elapsed
-
 # ==========================================
 # 2. PLOTTING SUITE
 # ==========================================
-
-def plot_fopid_results(history, best_params):
-    """Plots the convergence of the FOPID optimization."""
-    plt.figure(figsize=(6, 4))
-    plt.plot(history, 'b-o')
-    plt.title('FOPID Optimization Convergence')
-    plt.ylabel('ISE Cost')
-    plt.xlabel('Iteration')
-    plt.tight_layout()
-    plt.savefig('universal_fopid_convergence.png')
-    plt.close()
 
 def plot_computational_time(results_df):
     """Plots the total computational time for each dataset."""
@@ -308,7 +245,7 @@ def generate_dashboard(results_df):
 def main():
     """Main function to run the entire analysis pipeline."""
     print("="*60)
-    print("   UNIVERSAL CMAPSS ANALYZER (FD001 - FD004)")
+    print("   UNIVERSAL CMAPSS MEASUREMENT BASELINE (FD001 - FD004)")
     print("="*60)
     
     results_storage = []
@@ -369,24 +306,16 @@ def main():
     print("\n[INFO] All Datasets Processed. Results:")
     print(results_df[['Dataset', 'MSE', 'MAE', 'Time_Total']])
     
-    # --- PHASE 2: FOPID CONTROL (Run once to demonstrate stability) ---
-    print("\n>> Running FOPID Control Optimization (Robustness Check)...")
-    best_fopid, hist_fopid, time_fopid = optimize_fopid_pso()
-    print(f"   Best Params: {np.round(best_fopid, 3)}")
-    
-    # --- PHASE 3: GENERATE ALL PLOTS ---
-    print("\n>> Generating Universal Dashboards...")
+    # --- PHASE 2: GENERATE MEASUREMENT PLOTS ---
+    print("\n>> Generating Measurement Dashboards...")
     
     # 1. Computation Time Plot
     plot_computational_time(results_df)
     
-    # 2. FOPID Plots
-    plot_fopid_results(hist_fopid, best_fopid)
-    
-    # 3. Main Dashboard
+    # 2. Main Dashboard
     generate_dashboard(results_df)
     
-    print("\n[SUCCESS] Generated: 'universal_dashboard.png', 'universal_time_analysis.png', 'universal_fopid_convergence.png'")
+    print("\n[SUCCESS] Generated: 'universal_dashboard.png', 'universal_time_analysis.png'")
 
 if __name__ == '__main__':
     # Execute the main function when the script is run

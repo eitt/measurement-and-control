@@ -1,0 +1,109 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{Saxena2008}
+\citation{Saxena2008}
+\citation{Lei2018Machinery}
+\citation{Wu2018Remaining}
+\citation{Peringal2024}
+\citation{Elsherif2025}
+\citation{Chen2024}
+\citation{Mo2021Remaining}
+\citation{Yang2020Hyperparameter}
+\citation{Snoek2012Practical}
+\citation{Xue2025}
+\citation{Schwartz2020GreenAI,Strubell2019Energy,Garcia2019Estimation,Dhar2021Survey,Wu2022Sustainable,Patterson2021Carbon}
+\citation{Li2023Edge,Merenda2020Edge,Wang2020Convergence,Zhou2019Edge,Jiang2021Model,Chen2019Deep}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{2}{section.1}\protected@file@percent }
+\citation{Gong2023}
+\citation{Saxena2008}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Materials and Methods}{3}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Dataset Characterization and Preprocessing}{3}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.1.1}NASA C-MAPSS Turbofan Degradation Dataset}{3}{subsubsection.2.1.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Empirical summary of the C-MAPSS subsets used in this study. Train/test engine counts follow the released files; for FD004 the bundled readme swaps the counts, but the actual files contain 249 training engines and 248 test engines.}}{4}{table.1}\protected@file@percent }
+\newlabel{tab:dataset_stats}{{1}{4}{Empirical summary of the C-MAPSS subsets used in this study. Train/test engine counts follow the released files; for FD004 the bundled readme swaps the counts, but the actual files contain 249 training engines and 248 test engines}{table.1}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.1.2}Feature Selection, Regime Handling, and Training-Derived Normalization}{4}{subsubsection.2.1.2}\protected@file@percent }
+\newlabel{eq:normalization}{{1}{4}{Feature Selection, Regime Handling, and Training-Derived Normalization}{equation.1}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.1.3}Piecewise-Linear RUL Target Definition}{5}{subsubsection.2.1.3}\protected@file@percent }
+\newlabel{eq:rul_cap}{{2}{5}{Piecewise-Linear RUL Target Definition}{equation.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Illustrative capped RUL target for one synthetic run-to-failure trajectory. The plateau corresponds to the capped healthy phase, while the descending branch represents the linear countdown near failure.}}{5}{figure.1}\protected@file@percent }
+\newlabel{fig:rul_target_example}{{1}{5}{Illustrative capped RUL target for one synthetic run-to-failure trajectory. The plateau corresponds to the capped healthy phase, while the descending branch represents the linear countdown near failure}{figure.1}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.1.4}Sliding-Window Construction and Flattened Temporal Embeddings}{6}{subsubsection.2.1.4}\protected@file@percent }
+\newlabel{eq:window_embedding}{{3}{6}{Sliding-Window Construction and Flattened Temporal Embeddings}{equation.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Illustrative construction of the flattened sliding-window embedding. A short matrix of normalized measurements is stacked over the last $L$ cycles and then reshaped into a single ANN input vector.}}{6}{figure.2}\protected@file@percent }
+\newlabel{fig:window_embedding_example}{{2}{6}{Illustrative construction of the flattened sliding-window embedding. A short matrix of normalized measurements is stacked over the last $L$ cycles and then reshaped into a single ANN input vector}{figure.2}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.1.5}PSO Screening, MILP-Guided Pruning, and Final Evaluation}{6}{subsubsection.2.1.5}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Common experimental configuration used by the measurement-only ANN + PSO + pruning study.}}{7}{table.2}\protected@file@percent }
+\newlabel{tab:experiment_config}{{2}{7}{Common experimental configuration used by the measurement-only ANN + PSO + pruning study}{table.2}{}}
+\newlabel{eq:low_fidelity_objective}{{4}{7}{PSO Screening, MILP-Guided Pruning, and Final Evaluation}{equation.4}{}}
+\newlabel{eq:complexity_penalty}{{5}{7}{PSO Screening, MILP-Guided Pruning, and Final Evaluation}{equation.5}{}}
+\newlabel{eq:pruning_teacher_objective}{{6}{8}{PSO Screening, MILP-Guided Pruning, and Final Evaluation}{equation.6}{}}
+\newlabel{eq:pruning_absolute_error}{{7}{8}{PSO Screening, MILP-Guided Pruning, and Final Evaluation}{equation.7}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.1.6}Pruning Optimization Model}{8}{subsubsection.2.1.6}\protected@file@percent }
+\newlabel{eq:pruning_milp_objective}{{12}{9}{Pruning Optimization Model}{equation.12}{}}
+\newlabel{eq:pruning_milp_abs}{{13}{9}{Pruning Optimization Model}{equation.13}{}}
+\newlabel{eq:pruning_one_layer_affine}{{14}{9}{Pruning Optimization Model}{equation.14}{}}
+\newlabel{eq:pruning_one_layer_relu_lower}{{15}{9}{Pruning Optimization Model}{equation.15}{}}
+\newlabel{eq:pruning_one_layer_relu_upper}{{16}{9}{Pruning Optimization Model}{equation.16}{}}
+\newlabel{eq:pruning_one_layer_product}{{17}{9}{Pruning Optimization Model}{equation.17}{}}
+\newlabel{eq:pruning_one_layer_output}{{18}{9}{Pruning Optimization Model}{equation.18}{}}
+\newlabel{eq:pruning_two_layer_affine}{{19}{9}{Pruning Optimization Model}{equation.19}{}}
+\newlabel{eq:pruning_two_layer_product12}{{20}{9}{Pruning Optimization Model}{equation.20}{}}
+\newlabel{eq:pruning_two_layer_relu_lower}{{21}{9}{Pruning Optimization Model}{equation.21}{}}
+\newlabel{eq:pruning_two_layer_relu_upper}{{22}{9}{Pruning Optimization Model}{equation.22}{}}
+\newlabel{eq:pruning_two_layer_product23}{{23}{9}{Pruning Optimization Model}{equation.23}{}}
+\newlabel{eq:pruning_two_layer_output}{{24}{9}{Pruning Optimization Model}{equation.24}{}}
+\newlabel{eq:pruning_budget}{{25}{9}{Pruning Optimization Model}{equation.25}{}}
+\newlabel{eq:reduced_neighborhood_fixings}{{26}{10}{Pruning Optimization Model}{equation.26}{}}
+\newlabel{eq:activation_mean}{{27}{10}{Pruning Optimization Model}{equation.27}{}}
+\newlabel{eq:activation_aware_score}{{28}{10}{Pruning Optimization Model}{equation.28}{}}
+\newlabel{eq:score_gain}{{29}{10}{Pruning Optimization Model}{equation.29}{}}
+\newlabel{eq:uncertainty_score}{{30}{10}{Pruning Optimization Model}{equation.30}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Parameters of the activation-aware reduced-neighborhood heuristic used before the exact two-hidden-layer MILP.}}{11}{table.3}\protected@file@percent }
+\newlabel{tab:reduced_neighborhood_params}{{3}{11}{Parameters of the activation-aware reduced-neighborhood heuristic used before the exact two-hidden-layer MILP}{table.3}{}}
+\@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces PSO screening, MILP-guided pruning, and final evaluation for C-MAPSS RUL prediction}}{12}{algorithm.1}\protected@file@percent }
+\newlabel{alg:two_stage_ann_pso}{{1}{12}{Pruning Optimization Model}{algorithm.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Results and Diagnostics}{13}{section.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Dense-versus-pruned performance for the selected architecture in each C-MAPSS subset. Validation metrics come from the internal held-out engine split; official-test metrics use the benchmark test partition once at the end.}}{13}{table.4}\protected@file@percent }
+\newlabel{tab:pruning_results}{{4}{13}{Dense-versus-pruned performance for the selected architecture in each C-MAPSS subset. Validation metrics come from the internal held-out engine split; official-test metrics use the benchmark test partition once at the end}{table.4}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Selected dense topologies and resulting pruning compression for each subset. The reported pruning method corresponds to the final structure actually used in the selected candidate.}}{13}{table.5}\protected@file@percent }
+\newlabel{tab:topology_summary}{{5}{13}{Selected dense topologies and resulting pruning compression for each subset. The reported pruning method corresponds to the final structure actually used in the selected candidate}{table.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Stage~1 PSO convergence across FD001--FD004. Each panel summarizes the best low-fidelity score reached by the swarm for one subset.}}{14}{figure.3}\protected@file@percent }
+\newlabel{fig:stage1_convergence_grid}{{3}{14}{Stage~1 PSO convergence across FD001--FD004. Each panel summarizes the best low-fidelity score reached by the swarm for one subset}{figure.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Aggregate dense-versus-pruned comparison across the four subsets. The figure contrasts validation error, official-test error, and fit time under the shared experimental configuration.}}{15}{figure.4}\protected@file@percent }
+\newlabel{fig:metric_overview}{{4}{15}{Aggregate dense-versus-pruned comparison across the four subsets. The figure contrasts validation error, official-test error, and fit time under the shared experimental configuration}{figure.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Stage~3 training histories for the final selected pruned candidate in each subset. Each row corresponds to one C-MAPSS subset, with training loss on the left and validation MSE on the right.}}{16}{figure.5}\protected@file@percent }
+\newlabel{fig:stage3_histories_grid}{{5}{16}{Stage~3 training histories for the final selected pruned candidate in each subset. Each row corresponds to one C-MAPSS subset, with training loss on the left and validation MSE on the right}{figure.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Official-test prediction scatterplots for dense and pruned models across FD001--FD004. Each semi-transparent point represents one engine from the complete official NASA test split, and the diagonal indicates ideal agreement between predicted and true RUL.}}{17}{figure.6}\protected@file@percent }
+\newlabel{fig:prediction_grid}{{6}{17}{Official-test prediction scatterplots for dense and pruned models across FD001--FD004. Each semi-transparent point represents one engine from the complete official NASA test split, and the diagonal indicates ideal agreement between predicted and true RUL}{figure.6}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Discussion}{17}{section.4}\protected@file@percent }
+\bibstyle{ieeetr}
+\bibdata{../rul_hpo_repository}
+\bibcite{Saxena2008}{1}
+\bibcite{Lei2018Machinery}{2}
+\bibcite{Wu2018Remaining}{3}
+\bibcite{Peringal2024}{4}
+\bibcite{Elsherif2025}{5}
+\bibcite{Chen2024}{6}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Conclusion}{18}{section.5}\protected@file@percent }
+\bibcite{Mo2021Remaining}{7}
+\bibcite{Yang2020Hyperparameter}{8}
+\bibcite{Snoek2012Practical}{9}
+\bibcite{Xue2025}{10}
+\bibcite{Schwartz2020GreenAI}{11}
+\bibcite{Strubell2019Energy}{12}
+\bibcite{Garcia2019Estimation}{13}
+\bibcite{Dhar2021Survey}{14}
+\bibcite{Wu2022Sustainable}{15}
+\bibcite{Patterson2021Carbon}{16}
+\bibcite{Li2023Edge}{17}
+\bibcite{Merenda2020Edge}{18}
+\bibcite{Wang2020Convergence}{19}
+\bibcite{Zhou2019Edge}{20}
+\bibcite{Jiang2021Model}{21}
+\bibcite{Chen2019Deep}{22}
+\bibcite{Gong2023}{23}
+\@writefile{toc}{\contentsline {section}{\numberline {A}Ideas}{20}{appendix.A}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.1}MILP to prone NNs}{20}{subsection.A.1}\protected@file@percent }
+\gdef \@abspage@last{22}

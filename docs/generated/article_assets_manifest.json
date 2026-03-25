@@ -1,0 +1,18 @@
+{
+  "results_dir": "outputs\\torch_pytorch_milp_pruning",
+  "generated_dir": "docs\\generated",
+  "tables": [
+    "table_experiment_config.tex",
+    "table_pruning_results.tex",
+    "table_topology_summary.tex",
+    "table_reduced_neighborhood_params.tex"
+  ],
+  "figures": [
+    "fig_rul_target_example.png",
+    "fig_window_embedding_example.png",
+    "fig_stage1_convergence_grid.png",
+    "fig_metric_overview.png",
+    "fig_stage3_histories_grid.png",
+    "fig_prediction_grid.png"
+  ]
+}

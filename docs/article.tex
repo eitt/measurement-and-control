@@ -44,8 +44,8 @@ Francisco Pérez-Galarce\,\orcidlink{0000-0002-6921-298X}\thanks{Corresponding a
 % =========================================================================
 \begin{abstract}
 Predictive maintenance and robust control are twin pillars of modern industrial reliability. This paper presents a hybrid framework that synergizes data-driven prognostics with control-theoretic optimization. \color{red} Acá sugiero indicar el gap de literatura, por ejemplo, Recently, several large deep learning models have been proposed to address this task. However, such models typically require substantial effort for hyperparameter optimization and training, and often impose significant computational and capacity constraints at inference time. These limitations can be prohibitive in control-oriented architectures or resource-constrained decision-making settings.  To advance in a different direction, \color{black} we propose a lightweight Artificial Neural Network (ANN) for predicting the Remaining Useful Life (RUL) of turbofan engines, utilizing the NASA C-MAPSS dataset. Unlike recent heavy deep learning architectures, our approach employs Particle Swarm Optimization (PSO) to dynamically tune the ANN architecture, balancing accuracy with computational efficiency. Furthermore, the evolutionary optimization framework is extended to the control domain, where a Fractional-Order PID (FOPID) controller is tuned via PSO to ensure stability in a simulated load-frequency system. The methodology allows for accurate degradation monitoring—validated across four complexity levels (FD001--FD004)—and demonstrates how prognostic data can inform robust control actions. The findings suggest that, for prognostic-driven decision-making and control applications, architectural optimization and system integration may be more critical than increasing representational depth.
-
 \end{abstract}
+\noindent\textbf{Keywords:} Remaining Useful Life prediction, NASA C-MAPSS, particle swarm optimization, artificial neural networks, mixed-integer linear programming, model pruning
 
 % =========================================================================
 % 1. INTRODUCTION
@@ -62,184 +62,101 @@ The NASA Commercial Modular Aero-Propulsion System Simulation (C-MAPSS) dataset 
 
 \textcolor{blue}{To bridge this gap, this paper introduces a holistic architecture that couples a highly optimized, lightweight prognostic model with a robust control mechanism, actively prioritizing computational efficiency and environmental sustainability.} Building on this premise, a single Particle Swarm Optimization (PSO) engine is employed to address two tightly related tasks: (i) automated architecture selection for a \textcolor{blue}{computationally tractable and environmentally viable} MLP-based RUL predictor, and (ii) parameter tuning of a Fractional-Order PID (FOPID) controller. \textcolor{blue}{Instead of escalating network depth, we demonstrate that a precisely tuned, shallow ANN operating on explicit temporal embeddings is capable of capturing essential degradation trajectories while remaining small enough for practical edge deployment.} Inspired by the work of Gong et al.~\cite{Gong2023}, the FOPID controller introduces additional degrees of freedom through fractional integration and differentiation orders, enhancing robustness under nonlinear and degraded operating conditions. By coupling optimized health estimation with optimized feedback control, the proposed framework advances a holistic interpretation of \textit{Measurement and Control}, in which prognostic information is not an endpoint but a functional input to closed-loop system design.
 
-
 \color{red} Se pasa de la introducción a los materiales y métodos en mi opinión, deberíamos crear una breve revisión de literatura donde se muestren:  (1) los avances de machine learning y deep learning en la estimación de RUL (2) estimaciones de hiperparámetros en redes neuronales, considerando métodos tradicionales como grid search cross validation, random search cross validation y Bayesian Optimization (3) fractional order PID. Yo recomendaría incorporar referencias de journals Q1 WoS. \color{black}
-
 
 \color{red} recomiendo agregar un párrafo con el outline del paper
 
-
 Podría ser buena idea agregar un pequeño esquema donde se explique el problema de control que se busca resolver, destacando dónde operaría el modelo y justificando porque es relevante que sea un modelo liviano. 
 \color{black}
-
-
-
 
 % =========================================================================
 % 2. MATERIALS AND METHODS
 % =========================================================================
 \section{Materials and Methods}
+
 \iffalse
-
-
 \color{red} Sugiero incorporar esta explicación como un caso de estudio, acá se debería explicar solo la metodología completa, incluyendo, procesamiento de descriptoes, la optimización de la arquitectura, y la parte final de la predicción.  \color{black}
 \fi
 \input{article_methodology_updated.tex}
-\iffalse
-\subsection{Dataset Characterization and Preprocessing}
 
-\subsubsection{NASA C-MAPSS Turbofan Degradation Dataset}
-This study uses the NASA Commercial Modular Aero-Propulsion System Simulation (C-MAPSS) dataset \cite{Saxena2008}, a widely adopted benchmark for Remaining Useful Life (RUL) prediction. Each subset provides multivariate degradation trajectories generated by a high-fidelity turbofan engine simulation under varying operating conditions and fault configurations. Each record includes a unit identifier, a cycle index, three operational settings, and 21 sensor channels (26 columns in total). In line with recent benchmarks \cite{Elsherif2025}, all four subsets (FD001--FD004) are considered to evaluate generalization under increasing operational and fault complexity.
-
-\begin{table}[h]
-    \centering
-    \caption{Detailed characteristics of the C-MAPSS sub-datasets. Complexity increases from FD001 (single regime and fault) to FD004 (multiple regimes and faults).}
-    \label{tab:dataset_stats}
-    \begin{tabular}{lcccc}
-        \toprule
-        \textbf{Dataset} & \textbf{Op. Conditions} & \textbf{Fault Modes} & \textbf{Train Trajectories} & \textbf{Test Trajectories} \\
-        \midrule
-        \textbf{FD001} & 1 & 1 & 100 & 100 \\
-        \textbf{FD002} & 6 & 1 & 260 & 259 \\
-        \textbf{FD003} & 1 & 2 & 100 & 100 \\
-        \textbf{FD004} & 6 & 2 & 249 & 248 \\
-        \bottomrule
-    \end{tabular}
-\end{table}
-
-\subsubsection{Feature Selection and Per-Unit Normalization}
-\color{red} Recomiendo visualizar las features, esto también como caso de estudio.  \color{black}
-
-The implementation follows a pragmatic preprocessing strategy to remove channels with limited prognostic value. First, the three operational setting columns are excluded. Next, a fixed set of low-variance sensor channels is discarded (as implemented in the provided code by dropping the corresponding columns), resulting in a compact feature set of 10 sensors retained for modeling. Concretely, the retained channels correspond to Sensors $\{2,6,7,8,11,13,14,19,20,21\}$ under the standard C-MAPSS column mapping.
-
-Because channels exhibit heterogeneous units and magnitudes, Min--Max normalization is applied \emph{per engine unit} to avoid scale dominance and to mitigate unit-to-unit offsets. For unit $i$ at cycle $c$, with feature vector $\mathbf{x}_{i,c}\in\mathbb{R}^{d}$, the normalized vector is
-\begin{equation}
-    \tilde{\mathbf{x}}_{i,c}=\frac{\mathbf{x}_{i,c}-\min(\mathbf{X}_i)}{\max(\mathbf{X}_i)-\min(\mathbf{X}_i)},
-    \label{eq:normalization}
-\end{equation}
-where $\min(\mathbf{X}_i)$ and $\max(\mathbf{X}_i)$ are taken over the full life trajectory of unit $i$ for each feature dimension (implemented via \texttt{MinMaxScaler} fit on each unit).
-
-\subsubsection{Piecewise-Linear RUL Target Definition}
-\color{red} Disculpen, pero no entiendo muy bien esta sección, sugiero explicar en mayor profundidad e incorporar visualizaciones. \color{black}
-
-For training trajectories, the ground-truth RUL is computed from the final observed cycle of each unit. Let $C_i^{\max}$ denote the maximum cycle index for unit $i$. The uncapped RUL at cycle $c$ is $C_i^{\max}-c$. Following the piecewise-linear (PWL) convention used in the C-MAPSS literature, the target is capped at a saturation threshold $R_{\max}$ to reduce the influence of the early ``healthy'' phase:
-\begin{equation}
-    y_{i,c} = \min\left(C_i^{\max}-c,\; R_{\max}\right).
-    \label{eq:rul_cap}
-\end{equation}
-In the implementation, $R_{\max}=125$ cycles (via \texttt{clip(upper=125)}), consistent with common baselines.
-
-\subsubsection{Sliding-Window Construction and Flattened Temporal Embeddings}
-To capture temporal information without recurrent cells, a time-delay embedding is construc
-
-
-+78-*1/
-\fi
-%=========================================================================
+% =========================================================================
 % 3. RESULTS AND DIAGNOSTICS
 % =========================================================================
 \color{red} A la metodología le falta bastante trabajo, es acá donde se presentará la novedad del paper, sugiero darle prioridad \color{black}
 
 \section{Results and Diagnostics}
 
-This section details the quantitative performance of the proposed Particle Swarm Optimization (PSO)-tuned Multi-Layer Perceptron (MLP) across the four sub-datasets of the NASA C-MAPSS benchmark. The evaluation considers three critical dimensions: predictive accuracy (MSE/MAE), computational efficiency (training latency), and control robustness (FOPID optimization).
+The results reported here come from the experimental ANN + PSO + pruning branch executed on the four standard C-MAPSS subsets with a shared configuration. Table~\ref{tab:pruning_results} summarizes the dense-versus-pruned comparison for the final selected architecture in each subset, while Table~\ref{tab:topology_summary} reports the associated topology and compression statistics.
 
 \color{red} Los acrónimos se deberían definir solo una vez, dado que es un paper experimentar probablemente se pida comparar cada etapa con algún baseline, por ejemplo, comparar la selección de hiperparámetros con grid search cross validation o con Bayesian Optimization. Ahí se podría evaluar tiempo computacional y métricas de rendimiento. Por otra parte, se debería comparar la performance del modelo final con alguna red más grande o con Random Forest. Por último la fase final de predicción también se debería comparar con el control con PSO. \color{black}
 
-\subsection{Prognostic Performance Evaluation}
+\input{generated/table_pruning_results.tex}
 
-The consolidated predictive metrics are summarized in Table \ref{tab:results_summary}. The proposed architecture demonstrates significant robustness, achieving a global Mean Absolute Error (MAE) of $14.54 \pm 5.53$ cycles across all datasets.
+\input{generated/table_topology_summary.tex}
 
-\begin{table}[H]
-    \centering
-    \caption{Performance metrics of the PSO-optimized MLP across C-MAPSS datasets. Processing time includes both evolutionary architecture search and final model training.}
-    \label{tab:results_summary}
-    \begin{tabular}{lcccc}
-        \toprule
-        \textbf{Dataset} & \textbf{Complexity Profile} & \textbf{MSE} & \textbf{MAE} & \textbf{Total Time (s)} \\
-        \midrule
-        FD001 & 1 Op. Cond. / 1 Fault Mode & 209.67 & 10.55 & 29.05 \\
-        FD002 & 6 Op. Cond. / 1 Fault Mode & 634.97 & 19.95 & 62.69 \\
-        FD003 & 1 Op. Cond. / 2 Fault Modes & 171.82 & 9.05 & 31.07 \\
-        FD004 & 6 Op. Cond. / 2 Fault Modes & 589.84 & 18.60 & 39.10 \\
-        \bottomrule
-    \end{tabular}
-\end{table}
+Two immediate patterns emerge from Table~\ref{tab:pruning_results}. First, the pruned models improve validation MSE in all four subsets relative to their dense references. Second, that validation gain does not translate into a better official-test score under the current pruning budget: the dense model remains better on the official test split for FD001--FD004. This validation--test divergence is particularly visible in FD002 and FD004, which contain six operating regimes and therefore place a heavier burden on generalization across engine conditions.
 
-\subsubsection{Analysis of Single-Regime Datasets (FD001, FD003)}
-The model exhibits its highest fidelity on the single-operating-condition datasets. Notably, FD003 yielded the lowest error (MAE $\approx$ 9.05), outperforming even the simpler FD001. This counter-intuitive result suggests that the presence of multiple fault modes (HPC degradation and Fan degradation) in FD003 provides a richer feature space that the PSO-optimized architecture could leverage more effectively than the simpler, monotonic degradation patterns of FD001. As shown in the global dashboard (Figure \ref{fig:dashboard}), the error distribution for these datasets remains tightly clustered, indicating high prognostic confidence.
-
-\subsubsection{Analysis of Multi-Regime Datasets (FD002, FD004)}
-The introduction of six distinct operating conditions in FD002 and FD004 induces a significant stochastic dispersion in the predictions. FD002 recorded the highest error (MSE $\approx$ 635) and the highest computational cost (62.69s). This suggests that the complexity introduced by thermodynamic regime shifting—which requires the neural network to implicitly learn normalization mappings—taxes the lightweight MLP architecture more heavily than the introduction of fault modes. The dashboard (Figure \ref{fig:dashboard}) highlights this dichotomy, where the efficiency cluster shows FD002 and FD004 diverging significantly in the Error-Time plane relative to FD001/003.
+Figure~\ref{fig:stage1_convergence_grid} shows the Stage~1 PSO convergence traces across the four subsets. The swarm improves rapidly during the first iterations and then enters a flatter regime, which is consistent with the intended role of PSO in this study: not to certify a global optimum, but to identify a compact set of architectures worth carrying forward into the pruning and retuning stages.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=1.0\linewidth]{universal_dashboard.png}
-    \caption{Unified Performance Dashboard. Top-Left: MSE comparisons highlighting the regime-induced complexity gap. Top-Right: MAE trends showing heteroscedasticity across datasets. Bottom-Left: Efficiency clustering revealing the trade-off between dataset complexity and computational cost.}
-    \label{fig:dashboard}
+    \includegraphics[width=\textwidth]{generated/fig_stage1_convergence_grid.png}
+    \caption{Stage~1 PSO convergence across FD001--FD004. Each panel summarizes the best low-fidelity score reached by the swarm for one subset.}
+    \label{fig:stage1_convergence_grid}
 \end{figure}
 
-\subsection{Computational Efficiency Analysis}
-
-A critical requirement for onboard prognostics is low latency. Figure \ref{fig:time_analysis} breaks down the computational cost for each dataset. The system remains highly efficient, with the most complex training scenario (FD002) completing in under 63 seconds on standard hardware. This efficiency validates the use of MLP architectures over computationally heavy deep learning alternatives (e.g., Transformers or LSTMs) for resource-constrained edge computing environments.
+The dense-versus-pruned trade-off is easier to interpret in aggregate in Figure~\ref{fig:metric_overview}. The bottom-left panel confirms that pruning reduces validation MSE for all four subsets, but the top row shows that the official-test MSE and MAE remain slightly lower for the dense references. The bottom-right panel makes the computational trade-off explicit: once pruning and fine-tuning are added, the pruned branch becomes more expensive than dense final retraining in the current configuration, even though the resulting network is much smaller.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\linewidth]{universal_time_analysis.png}
-    \caption{Computational cost analysis. The processing time correlates strongly with the dimensionality of the operating conditions (FD002/FD004) rather than the number of fault modes.}
-    \label{fig:time_analysis}
+    \includegraphics[width=\textwidth]{generated/fig_metric_overview.png}
+    \caption{Aggregate dense-versus-pruned comparison across the four subsets. The figure contrasts validation error, official-test error, and fit time under the shared experimental configuration.}
+    \label{fig:metric_overview}
 \end{figure}
 
-\subsection{Robust Control Optimization (FOPID)}
-
-To validate the universality of the evolutionary framework, the PSO engine was applied to tune a Fractional Order PID (FOPID) controller. The convergence trajectory is depicted in Figure \ref{fig:fopid_convergence}. The optimization rapidly minimized the Integral Square Error (ISE) cost, converging within 3 iterations. 
-
-The resulting optimal parameters were $[K_p, K_i, K_d, \lambda, \mu] = [2.899, 1.185, 1.579, 1.096, 0.897]$. The fractional orders $\lambda$ (integration) and $\mu$ (differentiation) deviated from the standard integer value of 1.0, specifically $\lambda=1.096$ and $\mu=0.897$. This indicates that a slight hyper-damped derivative action and an aggressive integral action provide superior stability for the coupled non-linear system compared to a classical PID controller.
+The training dynamics of the final selected pruned candidates are shown in Figure~\ref{fig:stage3_histories_grid}. The histories are smooth and monotone on the training split, while the validation curves flatten well before the maximum epoch budget in the easier subsets. This behavior suggests that the current late-stage budgets are sufficient for candidate selection and that simply extending the epoch count is unlikely to close the dense-versus-pruned official-test gap without changing the pruning budget or the final fine-tuning strategy.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\linewidth]{universal_fopid_convergence.png}
-    \caption{FOPID Optimization Convergence. The rapid descent in ISE cost demonstrates PSO's ability to efficiently navigate the nonconvex search space of fractional-order control parameters.}
-    \label{fig:fopid_convergence}
+    \includegraphics[width=\textwidth]{generated/fig_stage3_histories_grid.png}
+    \caption{Stage~3 training histories for the final selected pruned candidate in each subset. Each row corresponds to one C-MAPSS subset, with training loss on the left and validation MSE on the right.}
+    \label{fig:stage3_histories_grid}
 \end{figure}
 
-% =========================================================================
-% 4. DISCUSSION
-% =========================================================================
+Finally, Figure~\ref{fig:prediction_grid} compares the official-test prediction behavior across all subsets using the complete benchmark test split for each dataset. Each point corresponds to one engine, so the panels summarize the full set of official test engines rather than a single illustrative trajectory. FD001 and FD003 remain the most stable cases, whereas FD002 and FD004 exhibit visibly wider spread in the predicted RUL values. This is consistent with the subset-level descriptive statistics: the multi-regime datasets combine operating-condition variability with truncated test trajectories and remain the most difficult setting for lightweight ANN baselines.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{generated/fig_prediction_grid.png}
+    \caption{Official-test prediction scatterplots for dense and pruned models across FD001--FD004. Each semi-transparent point represents one engine from the complete official NASA test split, and the diagonal indicates ideal agreement between predicted and true RUL.}
+    \label{fig:prediction_grid}
+\end{figure}
 
 \section{Discussion}
 
-The experimental results validate the hypothesis that a hybrid framework combining evolutionary optimization with shallow neural architectures offers a robust and computationally efficient alternative to contemporary deep learning trends. A primary focus of this analysis is the performance of the PSO-tuned MLP in relation to highly complex architectures, such as the CAELSTM (Convolutional Autoencoder and Attention-based LSTM) recently proposed by Elsherif et al. \cite{Elsherif2025}. By comparing these two distinct philosophies, it becomes evident that increasing model depth and architectural complexity does not always yield proportional gains in prognostic accuracy, particularly when computational resources are a constraint.
+The experiments support two conclusions that are easy to miss if only one metric is considered. On the one hand, the pruning stage is not meaningless: under the current 10\% keep-ratio budget, the selected pruned models consistently improve internal validation MSE, which indicates that the pruning-plus-fine-tuning stage acts as a strong structural regularizer on the held-out development engines. On the other hand, the official benchmark test set reveals that this regularization is too aggressive at the present compression level. In all four subsets, the dense reference remains the better final predictor once the official NASA split is consulted.
 
+The topology table adds another important diagnostic. All four selected final architectures are two-hidden-layer networks, and the reported pruning method for each subset is a magnitude-based fallback after attempting the reduced-neighborhood exact MILP. This outcome is methodologically informative rather than merely inconvenient. It shows that the reduced-neighborhood exact formulation meaningfully shrinks the binary search space, but still struggles to deliver a feasible incumbent fast enough for the present 30-second limit and the current layer widths. In other words, the mathematical pruning model is useful as a guide for structured compression, yet exact sparse-structure optimization remains a computational bottleneck at this scale.
 
-
-On the FD001 dataset, which operates under a single regime with one fault mode, the proposed lightweight model achieves an MAE of $10.55$, which is virtually identical to the 10.49 reported for the much more complex CAELSTM. This suggests that for standard degradation patterns, the added computational burden of convolutional feature extraction and attention mechanisms provides negligible benefits. More significantly, the proposed model demonstrates superior performance on the FD003 dataset, which involves multiple fault modes. While the CAELSTM baseline achieved an MAE of $10.68$, the PSO-optimized MLP achieved a lower error of $9.05$, representing an improvement of approximately $15\%$. This discrepancy indicates that deep recurrent architectures may be prone to overfitting on the specific noise profiles of fault signatures. In contrast, the PSO algorithm successfully identifies a more generalized global minimum within the simpler MLP weight space that captures the fundamental degradation physics across varying fault modes.
-
-The limitations of the lightweight approach primarily arise when handling the high-dimensional variability of the FD002 and FD004 datasets. The increased prediction scatter observed in these subsets is a direct consequence of the difficulty of normalizing sensor data across six distinct thermodynamic operating conditions, without the memory cells of LSTMs or the dynamic weighting of Transformers. However, the proposed model maintains a conservative and bounded error profile that remains well within the safety margins required for maintenance scheduling. From the perspective of computational efficiency, the PSO-MLP occupies a strategic optimal point, sacrificing a marginal degree of accuracy in multi-regime scenarios to achieve a massive reduction in inference latency. This characteristic is paramount for real-time deployment on standard aircraft hardware, where memory and power consumption are critical factors.
-
-
-Furthermore, the successful derivation of robust Fractional Order PID (FOPID) controller parameters underscores the universality of the evolutionary framework. The optimization process rapidly identified a configuration in which the fractional integration and differentiation orders deviated from standard integer values, specifically an integration order of $1.096$ and a differentiation order of $0.897$. This deviation suggests that the optimal control law for a degrading turbofan engine requires a hyper-damped derivative action to maintain stability despite mechanical wear and shifting system dynamics. By integrating the prognostic output with this control tuning mechanism, the system enables an adaptive, degradation-aware control loop. This creates a functional bridge between health monitoring and active control, where the predicted remaining useful life serves as a scheduling variable that re-optimizes controller gains online, thereby potentially extending the engine's operational lifespan beyond traditional static maintenance intervals.
+The subset pattern is also consistent with the descriptive statistics in the data card. FD001 and FD003 are single-regime datasets with more homogeneous operating settings, and they remain easier for lightweight MLPs. FD002 and FD004 require generalization across multiple operating regimes, and their higher official-test errors confirm that regime diversity is a stronger challenge for this family of models than simply adding a second fault mode. This makes the current workflow especially valuable as a measurement study: it separates the effects of data complexity, model size, and optimization strategy without relying on test-set reuse.
 
 % =========================================================================
 % 5. CONCLUSION
 % =========================================================================
 \section{Conclusion}
 
-This work presented a unified evolutionary framework for turbofan prognostics and robust control, challenging the prevailing paradigm that deeper neural architectures are inherently superior for industrial health management. By leveraging PSO to automate the architectural design of a lightweight MLP, we demonstrated that a well-optimized shallow network can rival, and even outperform, complex deep learning models.
+This paper reframed the project as a measurement-only RUL study and evaluated a reproducible ANN workflow built around low-cost PSO screening, MILP-guided pruning, and selective retuning on the NASA C-MAPSS benchmark. The main methodological contribution is not a claim of global optimality, but a disciplined separation of roles: PSO screens structures cheaply, pruning compresses shortlisted models on a calibration subset, and final evaluation remains tied to a single use of the official NASA test split.
 
-Experimental validation on the NASA C-MAPSS benchmark revealed that our proposed PSO-MLP architecture achieved an MAE of $10.55$ on the FD001 dataset, performing on par with the $10.49$ MAE reported by the state-of-the-art CAELSTM model. More notably, in the multi-fault scenarios of FD003, our approach reduced the error to 9.05, outperforming the deep learning baseline by approximately $15\%$. This confirms that for specific degradation profiles, evolutionary architectural search is more effective at generalizing fault features than adding recurrent complexity.
-
-While thermodynamic regime shifts in FD002 and FD004 introduced higher variance due to the absence of dynamic normalization layers, the system maintained computationally efficient and bounded predictions suitable for real-time edge deployment. Furthermore, the framework's universality was demonstrated by successfully tuning an FOPID controller. The derivation of non-integer control parameters ($\lambda \approx 1.1, \mu \approx 0.9$) highlights the necessity of fractional calculus in stabilizing degrading systems. Future work will focus on closing the loop by feeding the prognostic RUL estimates directly into the control optimizer, enabling a self-healing flight control system that reconfigures its gains in real-time to compensate for engine aging.
+Under the current aggressive pruning budget, the pruned candidates retain roughly one tenth of the active arcs and improve validation error, but the dense reference still provides the best official-test accuracy across FD001--FD004. The results therefore motivate two immediate next steps: less aggressive keep ratios and stronger exact-pruning neighborhoods for two-hidden-layer models. Even with that limitation, the workflow provides a scientifically defensible baseline for studying how lightweight architecture search and structured pruning interact in turbofan RUL prediction.
 
 % =========================================================================
 % REFERENCES
 % =========================================================================
 \bibliographystyle{ieeetr}
-\bibliography{rul_hpo_priority_reading,rul_hpo_repository,docs/references}
-
+\bibliography{../rul_hpo_repository}
 
 \appendix
-\section{Ideas }
+\section{Ideas}
 
 \subsection{MILP to prone NNs}
 \textbf{Sets and indices}
@@ -250,9 +167,7 @@ While thermodynamic regime shifts in FD002 and FD004 introduced higher variance 
 \mathcal{O} &= \{1,\dots,m\} \quad \text{output neurons}.
 \end{align}
 
-
 \textbf{Given data}
-
 \begin{align}
 x^n_i &:\ \text{input feature } i \text{ of sample } n, \\
 \hat{y}^n_k &:\ \text{output of the original (reference) neural network for sample } n \text{ and output } k.
@@ -262,7 +177,6 @@ Let $W^{(1)}_{ji},\; b^{(1)}_j$ be the weights and biases from input to hidden l
 L^n_j \le a^n_j \le U^n_j,\qquad \forall n\in\mathcal{N},\; j\in\mathcal{H},
 \]
 where \(a^n_j\) is the pre-activation of hidden neuron \(j\) for sample \(n\), and \(L^n_j,U^n_j\) are valid lower and upper bounds.
-
 
 \textbf{Decision variables}
 \[
@@ -404,4 +318,5 @@ y^n_k\in\mathbb{R}.
 && \forall n\in\mathcal{N},\; j\in\mathcal{H},\; k\in\mathcal{O}.
 \end{aligned}
 \]
+
 \end{document}

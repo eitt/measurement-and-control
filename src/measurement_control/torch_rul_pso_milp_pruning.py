@@ -12,6 +12,8 @@ Important scope note:
 - This module is intentionally separate from torch_rul_pso.py.
 - A linear-error MILP is used for tractability with scipy.optimize.milp for
   one- and two-hidden-layer ReLU ANNs.
+- Two-hidden-layer candidates default to a reduced-neighborhood exact MILP
+  seeded by an activation-aware local-search heuristic.
 - If the exact MILP hits the solver time limit or does not return a solution,
   the pipeline falls back to a transparent global magnitude-pruning mask.
 """
@@ -66,6 +68,13 @@ class MILPPruningConfig(base.TrainingConfig):
     pruning_calibration_size: int = 16
     pruning_time_limit_sec: float = 30.0
     pruning_mip_rel_gap: float = 0.0
+    two_hidden_milp_strategy: str = "reduced_neighborhood"
+    reduced_milp_free_arc_fraction: float = 0.1
+    reduced_milp_min_free_arcs: int = 1000
+    reduced_milp_max_free_arcs: int = 4000
+    activation_local_search_rounds: int = 4
+    activation_local_search_pool_size: int = 6
+    activation_local_search_max_evals: int = 32
     pruning_finetune_epochs: int = 80
     pruning_finetune_patience: int = 10
     pruning_max_stage1_candidates: int = 3
@@ -88,6 +97,20 @@ class MILPPruningConfig(base.TrainingConfig):
             raise ValueError("pruning_time_limit_sec must be positive.")
         if self.pruning_max_stage1_candidates < 1:
             raise ValueError("pruning_max_stage1_candidates must be at least 1.")
+        if self.two_hidden_milp_strategy not in {"full_exact", "reduced_neighborhood"}:
+            raise ValueError("two_hidden_milp_strategy must be 'full_exact' or 'reduced_neighborhood'.")
+        if not 0 < self.reduced_milp_free_arc_fraction <= 1:
+            raise ValueError("reduced_milp_free_arc_fraction must lie in (0, 1].")
+        if self.reduced_milp_min_free_arcs < 1:
+            raise ValueError("reduced_milp_min_free_arcs must be at least 1.")
+        if self.reduced_milp_max_free_arcs < self.reduced_milp_min_free_arcs:
+            raise ValueError("reduced_milp_max_free_arcs must be >= reduced_milp_min_free_arcs.")
+        if self.activation_local_search_rounds < 1:
+            raise ValueError("activation_local_search_rounds must be at least 1.")
+        if self.activation_local_search_pool_size < 1:
+            raise ValueError("activation_local_search_pool_size must be at least 1.")
+        if self.activation_local_search_max_evals < 1:
+            raise ValueError("activation_local_search_max_evals must be at least 1.")
 
 
 @dataclass
@@ -116,9 +139,13 @@ class MILPPruningResult:
     keep_ratio: float
     solve_time_sec: float
     solver_status: str
+    solve_strategy: str
     success: bool
     objective_value: Optional[float]
     calibration_mae: float
+    fixed_keep_arcs: int = 0
+    fixed_drop_arcs: int = 0
+    free_binary_arcs: int = 0
     fallback_used: bool = False
     pruning_method: str = "milp"
 
@@ -331,12 +358,347 @@ def ensure_nonempty_layer_masks(
     return adjusted_masks
 
 
+def flatten_layer_arrays(layer_arrays: Sequence[np.ndarray]) -> np.ndarray:
+    """Flatten a list of same-purpose per-layer arrays into one vector."""
+
+    return np.concatenate([np.asarray(array).reshape(-1) for array in layer_arrays]).astype(np.float64)
+
+
+def build_masks_from_flat_vector(
+    model: nn.Module,
+    flat_mask: np.ndarray,
+) -> List[np.ndarray]:
+    """Reshape a flat mask vector back into per-layer binary masks."""
+
+    layer_masks: List[np.ndarray] = []
+    offset = 0
+    for layer in get_linear_layers(model):
+        size = int(layer.weight.numel())
+        layer_mask = flat_mask[offset : offset + size].reshape(layer.weight.shape).astype(np.float64)
+        layer_masks.append(layer_mask)
+        offset += size
+    return ensure_nonempty_layer_masks(model, layer_masks)
+
+
+def masked_teacher_predictions(
+    model: nn.Module,
+    X: np.ndarray,
+    layer_masks: Sequence[np.ndarray],
+) -> np.ndarray:
+    """Evaluate the masked ANN in NumPy for a small calibration subset."""
+
+    linear_layers = get_linear_layers(model)
+    current = np.asarray(X, dtype=np.float64)
+    for layer_index, (layer, mask) in enumerate(zip(linear_layers, layer_masks)):
+        weights = layer.weight.detach().cpu().numpy().astype(np.float64) * np.asarray(mask, dtype=np.float64)
+        bias = layer.bias.detach().cpu().numpy().astype(np.float64)
+        current = current @ weights.T + bias
+        if layer_index < len(linear_layers) - 1:
+            current = np.maximum(current, 0.0)
+    return current.reshape(-1)
+
+
+def masked_teacher_mae(
+    model: nn.Module,
+    X: np.ndarray,
+    y_hat: np.ndarray,
+    layer_masks: Sequence[np.ndarray],
+) -> float:
+    """Compute teacher-matching MAE for a masked network on the calibration set."""
+
+    preds = masked_teacher_predictions(model, X, layer_masks)
+    return float(np.mean(np.abs(preds - y_hat)))
+
+
+def collect_linear_layer_inputs(
+    model: nn.Module,
+    X: np.ndarray,
+) -> List[np.ndarray]:
+    """Collect the input activations seen by each Linear layer for calibration samples."""
+
+    current = torch.tensor(X, dtype=torch.float32)
+    layer_inputs: List[np.ndarray] = []
+    with torch.no_grad():
+        for layer in model.network:
+            if isinstance(layer, nn.Linear):
+                layer_inputs.append(current.detach().cpu().numpy().astype(np.float64))
+            current = layer(current)
+    return layer_inputs
+
+
+def activation_aware_arc_scores(
+    model: nn.Module,
+    X: np.ndarray,
+) -> List[np.ndarray]:
+    """
+    Score arcs by weight magnitude times mean absolute incoming activation.
+
+    This uses the actual dense reference activations on the calibration subset,
+    which is more informative than pure weight magnitude when constructing the
+    reduced-neighborhood seed.
+    """
+
+    linear_layers = get_linear_layers(model)
+    layer_inputs = collect_linear_layer_inputs(model, X)
+    score_arrays: List[np.ndarray] = []
+    for layer, layer_input in zip(linear_layers, layer_inputs):
+        mean_abs_input = np.mean(np.abs(layer_input), axis=0, dtype=np.float64)
+        weights = np.abs(layer.weight.detach().cpu().numpy().astype(np.float64))
+        score_arrays.append(weights * mean_abs_input.reshape(1, -1))
+    return score_arrays
+
+
+def build_score_ranked_masks(
+    model: nn.Module,
+    score_arrays: Sequence[np.ndarray],
+    keep_total: int,
+) -> List[np.ndarray]:
+    """Construct a binary keep mask from global activation-aware arc scores."""
+
+    flat_scores = flatten_layer_arrays(score_arrays)
+    keep_total = min(flat_scores.size, max(len(score_arrays), int(keep_total)))
+    sorted_indices = np.argsort(-flat_scores, kind="mergesort")
+    flat_mask = np.zeros(flat_scores.size, dtype=np.float64)
+    flat_mask[sorted_indices[:keep_total]] = 1.0
+    return build_masks_from_flat_vector(model, flat_mask)
+
+
+def enforce_keep_budget(
+    model: nn.Module,
+    layer_masks: Sequence[np.ndarray],
+    score_arrays: Sequence[np.ndarray],
+    keep_total: int,
+) -> List[np.ndarray]:
+    """Adjust a mask to satisfy the global keep budget while keeping each layer nonempty."""
+
+    adjusted_masks = [np.array(mask, dtype=np.float64, copy=True) for mask in ensure_nonempty_layer_masks(model, layer_masks)]
+    score_arrays = [np.asarray(scores, dtype=np.float64) for scores in score_arrays]
+    active_total = int(sum(np.count_nonzero(mask) for mask in adjusted_masks))
+
+    while active_total > keep_total:
+        best_layer = None
+        best_index = None
+        best_score = float("inf")
+        for layer_idx, (mask, scores) in enumerate(zip(adjusted_masks, score_arrays)):
+            active_idx = np.flatnonzero(mask.reshape(-1) > 0.5)
+            if active_idx.size <= 1:
+                continue
+            layer_scores = scores.reshape(-1)[active_idx]
+            candidate_pos = int(np.argmin(layer_scores))
+            candidate_index = int(active_idx[candidate_pos])
+            candidate_score = float(layer_scores[candidate_pos])
+            if candidate_score < best_score:
+                best_layer = layer_idx
+                best_index = candidate_index
+                best_score = candidate_score
+        if best_layer is None or best_index is None:
+            break
+        adjusted_masks[best_layer].reshape(-1)[best_index] = 0.0
+        active_total -= 1
+
+    while active_total < keep_total:
+        best_layer = None
+        best_index = None
+        best_score = -float("inf")
+        for layer_idx, (mask, scores) in enumerate(zip(adjusted_masks, score_arrays)):
+            inactive_idx = np.flatnonzero(mask.reshape(-1) < 0.5)
+            if inactive_idx.size == 0:
+                continue
+            layer_scores = scores.reshape(-1)[inactive_idx]
+            candidate_pos = int(np.argmax(layer_scores))
+            candidate_index = int(inactive_idx[candidate_pos])
+            candidate_score = float(layer_scores[candidate_pos])
+            if candidate_score > best_score:
+                best_layer = layer_idx
+                best_index = candidate_index
+                best_score = candidate_score
+        if best_layer is None or best_index is None:
+            break
+        adjusted_masks[best_layer].reshape(-1)[best_index] = 1.0
+        active_total += 1
+
+    return ensure_nonempty_layer_masks(model, adjusted_masks)
+
+
+def activation_aware_local_search_masks(
+    model: nn.Module,
+    X: np.ndarray,
+    y_hat: np.ndarray,
+    score_arrays: Sequence[np.ndarray],
+    keep_total: int,
+    rounds: int,
+    pool_size: int,
+    max_evals: int,
+) -> Tuple[List[np.ndarray], float]:
+    """
+    Improve the activation-aware score seed with a teacher-matching swap search.
+
+    The search keeps the global arc budget fixed and only evaluates a bounded
+    set of promising same-layer swap moves at each round.
+    """
+
+    current_masks = build_score_ranked_masks(model, score_arrays, keep_total)
+    current_masks = enforce_keep_budget(model, current_masks, score_arrays, keep_total)
+    current_loss = masked_teacher_mae(model, X, y_hat, current_masks)
+
+    for _ in range(rounds):
+        scored_moves: List[Tuple[float, int, int, int]] = []
+        for layer_idx, (mask, scores) in enumerate(zip(current_masks, score_arrays)):
+            flat_mask = mask.reshape(-1)
+            flat_scores = scores.reshape(-1)
+            active_idx = np.flatnonzero(flat_mask > 0.5)
+            inactive_idx = np.flatnonzero(flat_mask < 0.5)
+            if active_idx.size <= 1 or inactive_idx.size == 0:
+                continue
+            low_keep = active_idx[np.argsort(flat_scores[active_idx])[:pool_size]]
+            high_drop = inactive_idx[np.argsort(-flat_scores[inactive_idx])[:pool_size]]
+            for keep_idx in low_keep:
+                for drop_idx in high_drop:
+                    score_gain = float(flat_scores[drop_idx] - flat_scores[keep_idx])
+                    scored_moves.append((score_gain, layer_idx, int(keep_idx), int(drop_idx)))
+
+        if not scored_moves:
+            break
+
+        scored_moves.sort(key=lambda item: item[0], reverse=True)
+        best_candidate_masks: Optional[List[np.ndarray]] = None
+        best_candidate_loss = current_loss
+        eval_count = 0
+        for _, layer_idx, keep_idx, drop_idx in scored_moves:
+            candidate_masks = [np.array(mask, dtype=np.float64, copy=True) for mask in current_masks]
+            layer_mask = candidate_masks[layer_idx].reshape(-1)
+            layer_mask[keep_idx] = 0.0
+            layer_mask[drop_idx] = 1.0
+            candidate_masks = ensure_nonempty_layer_masks(model, candidate_masks)
+            candidate_loss = masked_teacher_mae(model, X, y_hat, candidate_masks)
+            eval_count += 1
+            if candidate_loss + 1e-9 < best_candidate_loss:
+                best_candidate_loss = candidate_loss
+                best_candidate_masks = candidate_masks
+            if eval_count >= max_evals:
+                break
+
+        if best_candidate_masks is None:
+            break
+
+        current_masks = enforce_keep_budget(model, best_candidate_masks, score_arrays, keep_total)
+        current_loss = best_candidate_loss
+
+    return current_masks, current_loss
+
+
+def build_reduced_neighborhood_fixings(
+    model: nn.Module,
+    X_calib: np.ndarray,
+    y_hat: np.ndarray,
+    keep_fraction: float,
+    free_arc_fraction: float,
+    min_free_arcs: int,
+    max_free_arcs: int,
+    local_search_rounds: int,
+    local_search_pool_size: int,
+    local_search_max_evals: int,
+) -> Tuple[Dict[str, np.ndarray], Dict[str, int]]:
+    """
+    Build reduced-neighborhood fixings around an activation-aware local-search seed.
+
+    A heuristic keep mask is first built from activation-aware arc scores and
+    then improved by a bounded swap-based local search on the calibration
+    teacher-matching objective. The exact two-hidden-layer MILP then optimizes
+    only a small uncertain band around that heuristic mask.
+    """
+
+    score_arrays = activation_aware_arc_scores(model, X_calib)
+    total_arcs = int(sum(scores.size for scores in score_arrays))
+    keep_total = min(total_arcs, max(len(score_arrays), int(round(keep_fraction * total_arcs))))
+    desired_free = int(round(free_arc_fraction * total_arcs))
+    desired_free = max(min_free_arcs, desired_free)
+    desired_free = min(max_free_arcs, desired_free, total_arcs)
+
+    initial_masks = build_score_ranked_masks(model, score_arrays, keep_total)
+    initial_masks = enforce_keep_budget(model, initial_masks, score_arrays, keep_total)
+    heuristic_masks, heuristic_loss = activation_aware_local_search_masks(
+        model=model,
+        X=X_calib,
+        y_hat=y_hat,
+        score_arrays=score_arrays,
+        keep_total=keep_total,
+        rounds=local_search_rounds,
+        pool_size=local_search_pool_size,
+        max_evals=local_search_max_evals,
+    )
+    heuristic_masks = enforce_keep_budget(model, heuristic_masks, score_arrays, keep_total)
+
+    flat_scores = flatten_layer_arrays(score_arrays)
+    threshold = np.partition(flat_scores, -keep_total)[-keep_total]
+    uncertainty = np.abs(flat_scores - threshold)
+
+    initial_flat = flatten_layer_arrays(initial_masks)
+    heuristic_flat = flatten_layer_arrays(heuristic_masks)
+    changed_idx = np.flatnonzero(initial_flat != heuristic_flat)
+    if changed_idx.size:
+        uncertainty[changed_idx] = -1.0
+
+    sorted_uncertain = np.argsort(uncertainty, kind="mergesort")
+    free_indices = sorted_uncertain[:desired_free]
+    fixed_state = heuristic_flat.astype(np.int8)
+    fixed_state[free_indices] = -1
+
+    fixed_masks: Dict[str, np.ndarray] = {}
+    offset = 0
+    for layer_index, mask in enumerate(heuristic_masks, start=1):
+        size = mask.size
+        layer_state = fixed_state[offset : offset + size].reshape(mask.shape).copy()
+        fixed_masks[f"z{layer_index}"] = layer_state
+        offset += size
+
+    fixed_keep_arcs = int(np.count_nonzero(fixed_state == 1))
+    fixed_drop_arcs = int(np.count_nonzero(fixed_state == 0))
+    free_binary_arcs = int(np.count_nonzero(fixed_state < 0))
+    summary = {
+        "fixed_keep_arcs": fixed_keep_arcs,
+        "fixed_drop_arcs": fixed_drop_arcs,
+        "free_binary_arcs": free_binary_arcs,
+        "target_keep_arcs": int(keep_total),
+        "heuristic_teacher_mae": float(heuristic_loss),
+    }
+    return fixed_masks, summary
+
+
+def apply_fixed_binary_masks(
+    lb: np.ndarray,
+    ub: np.ndarray,
+    offsets: Dict[str, int],
+    fixed_binary_masks: Optional[Dict[str, np.ndarray]],
+) -> None:
+    """Fix selected binary arc variables by tightening their lower/upper bounds."""
+
+    if not fixed_binary_masks:
+        return
+
+    for key, state in fixed_binary_masks.items():
+        if key not in offsets:
+            continue
+        flat_state = np.asarray(state).reshape(-1)
+        start = int(offsets[key])
+        stop = start + flat_state.size
+        fixed_zero = flat_state == 0
+        fixed_one = flat_state == 1
+        lb_slice = lb[start:stop]
+        ub_slice = ub[start:stop]
+        lb_slice[fixed_zero] = 0.0
+        ub_slice[fixed_zero] = 0.0
+        lb_slice[fixed_one] = 1.0
+        ub_slice[fixed_one] = 1.0
+
+
 def build_milp_pruning_problem_one_hidden_layer(
     X_calib: np.ndarray,
     y_hat: np.ndarray,
     model: nn.Module,
     keep_fraction: float,
     exact_budget: bool,
+    fixed_binary_masks: Optional[Dict[str, np.ndarray]] = None,
 ) -> Tuple[np.ndarray, np.ndarray, Bounds, List[LinearConstraint], Dict[str, object]]:
     """
     Build an exact MILP for one-hidden-layer ReLU arc pruning.
@@ -413,6 +775,7 @@ def build_milp_pruning_problem_one_hidden_layer(
     lb[offsets["z2"] : offsets["z2"] + counts["z2"]] = 0.0
     ub[offsets["z2"] : offsets["z2"] + counts["z2"]] = 1.0
     integrality[offsets["z2"] : offsets["z2"] + counts["z2"]] = 1
+    apply_fixed_binary_masks(lb, ub, offsets, fixed_binary_masks)
 
     lb[offsets["delta"] : offsets["delta"] + counts["delta"]] = 0.0
     ub[offsets["delta"] : offsets["delta"] + counts["delta"]] = 1.0
@@ -523,6 +886,7 @@ def build_milp_pruning_problem_two_hidden_layers(
     model: nn.Module,
     keep_fraction: float,
     exact_budget: bool,
+    fixed_binary_masks: Optional[Dict[str, np.ndarray]] = None,
 ) -> Tuple[np.ndarray, np.ndarray, Bounds, List[LinearConstraint], Dict[str, object]]:
     """
     Build an exact MILP for two-hidden-layer ReLU arc pruning.
@@ -628,6 +992,7 @@ def build_milp_pruning_problem_two_hidden_layers(
         lb[offsets[key] : offsets[key] + counts[key]] = 0.0
         ub[offsets[key] : offsets[key] + counts[key]] = 1.0
         integrality[offsets[key] : offsets[key] + counts[key]] = 1
+    apply_fixed_binary_masks(lb, ub, offsets, fixed_binary_masks)
 
     lb[offsets["a1"] : offsets["a1"] + counts["a1"]] = lower_a1.reshape(-1)
     ub[offsets["a1"] : offsets["a1"] + counts["a1"]] = upper_a1.reshape(-1)
@@ -788,6 +1153,7 @@ def build_milp_pruning_problem(
     model: nn.Module,
     keep_fraction: float,
     exact_budget: bool,
+    fixed_binary_masks: Optional[Dict[str, np.ndarray]] = None,
 ) -> Tuple[np.ndarray, np.ndarray, Bounds, List[LinearConstraint], Dict[str, object]]:
     """Dispatch to the exact MILP builder matching the candidate depth."""
 
@@ -799,6 +1165,7 @@ def build_milp_pruning_problem(
             model=model,
             keep_fraction=keep_fraction,
             exact_budget=exact_budget,
+            fixed_binary_masks=fixed_binary_masks,
         )
     if len(linear_layers) == 3:
         return build_milp_pruning_problem_two_hidden_layers(
@@ -807,6 +1174,7 @@ def build_milp_pruning_problem(
             model=model,
             keep_fraction=keep_fraction,
             exact_budget=exact_budget,
+            fixed_binary_masks=fixed_binary_masks,
         )
     raise ValueError("Exact MILP pruning currently supports one or two hidden layers only.")
 
@@ -839,6 +1207,10 @@ def solve_milp_pruning(
     """Solve the exact pruning MILP or fall back to magnitude pruning if needed."""
 
     linear_layers = get_linear_layers(model)
+    solve_strategy = "full_exact"
+    fixed_keep_arcs = 0
+    fixed_drop_arcs = 0
+    free_binary_arcs = 0
     if len(linear_layers) not in {2, 3}:
         layer_masks = magnitude_pruning_masks(model, config.pruning_keep_fraction)
         layer_masks = ensure_nonempty_layer_masks(model, layer_masks)
@@ -855,21 +1227,47 @@ def solve_milp_pruning(
             keep_ratio=float(active_total / max(total_arcs, 1)),
             solve_time_sec=0.0,
             solver_status="multilayer_magnitude_fallback",
+            solve_strategy="unsupported_depth",
             success=False,
             objective_value=None,
             calibration_mae=float("nan"),
+            fixed_keep_arcs=0,
+            fixed_drop_arcs=0,
+            free_binary_arcs=0,
             fallback_used=True,
             pruning_method="magnitude_unsupported_depth",
         )
 
     X_calib, _ = calibration_data
     y_hat = base.predict_torch_model(model, X_calib, config.device).astype(np.float64)
+    fixed_binary_masks: Optional[Dict[str, np.ndarray]] = None
+    if len(linear_layers) == 3 and config.two_hidden_milp_strategy == "reduced_neighborhood":
+        fixed_binary_masks, neighborhood_summary = build_reduced_neighborhood_fixings(
+            model=model,
+            X_calib=X_calib.astype(np.float64),
+            y_hat=y_hat,
+            keep_fraction=config.pruning_keep_fraction,
+            free_arc_fraction=config.reduced_milp_free_arc_fraction,
+            min_free_arcs=config.reduced_milp_min_free_arcs,
+            max_free_arcs=config.reduced_milp_max_free_arcs,
+            local_search_rounds=config.activation_local_search_rounds,
+            local_search_pool_size=config.activation_local_search_pool_size,
+            local_search_max_evals=config.activation_local_search_max_evals,
+        )
+        solve_strategy = "reduced_neighborhood_exact"
+        fixed_keep_arcs = int(neighborhood_summary["fixed_keep_arcs"])
+        fixed_drop_arcs = int(neighborhood_summary["fixed_drop_arcs"])
+        free_binary_arcs = int(neighborhood_summary["free_binary_arcs"])
+    else:
+        free_binary_arcs = int(sum(layer.weight.numel() for layer in linear_layers))
+
     c, integrality, bounds, constraints, meta = build_milp_pruning_problem(
         X_calib=X_calib.astype(np.float64),
         y_hat=y_hat,
         model=model,
         keep_fraction=config.pruning_keep_fraction,
         exact_budget=config.pruning_exact_budget,
+        fixed_binary_masks=fixed_binary_masks,
     )
 
     solve_start = time.perf_counter()
@@ -902,11 +1300,19 @@ def solve_milp_pruning(
             keep_ratio=float(active_total / max(total_arcs, 1)),
             solve_time_sec=float(solve_time),
             solver_status=str(result.status),
+            solve_strategy=solve_strategy,
             success=False,
             objective_value=None if result.fun is None else float(result.fun),
             calibration_mae=float("nan"),
+            fixed_keep_arcs=fixed_keep_arcs,
+            fixed_drop_arcs=fixed_drop_arcs,
+            free_binary_arcs=free_binary_arcs,
             fallback_used=True,
-            pruning_method="magnitude_solver_fallback",
+            pruning_method=(
+                "magnitude_solver_fallback_after_reduced_exact"
+                if solve_strategy == "reduced_neighborhood_exact"
+                else "magnitude_solver_fallback"
+            ),
         )
 
     x_sol = np.asarray(result.x, dtype=np.float64)
@@ -926,11 +1332,15 @@ def solve_milp_pruning(
         keep_ratio=float(active_total / max(total_arcs, 1)),
         solve_time_sec=float(solve_time),
         solver_status=str(result.status),
+        solve_strategy=solve_strategy,
         success=True,
         objective_value=None if result.fun is None else float(result.fun),
         calibration_mae=float(np.mean(np.abs(y_sol - y_hat))),
+        fixed_keep_arcs=fixed_keep_arcs,
+        fixed_drop_arcs=fixed_drop_arcs,
+        free_binary_arcs=free_binary_arcs,
         fallback_used=False,
-        pruning_method="milp_exact",
+        pruning_method="milp_exact_reduced_neighborhood" if solve_strategy == "reduced_neighborhood_exact" else "milp_exact",
     )
 
 
@@ -1253,8 +1663,12 @@ def save_candidate_comparison_artifacts(
                 "nonzero_parameters": int(candidate.nonzero_parameters),
                 "density": float(candidate.density),
                 "pruning_method": str(candidate.pruning_result.pruning_method),
+                "solve_strategy": str(candidate.pruning_result.solve_strategy),
                 "active_total_arcs": int(candidate.pruning_result.active_total_arcs),
                 "keep_ratio": float(candidate.pruning_result.keep_ratio),
+                "fixed_keep_arcs": int(candidate.pruning_result.fixed_keep_arcs),
+                "fixed_drop_arcs": int(candidate.pruning_result.fixed_drop_arcs),
+                "free_binary_arcs": int(candidate.pruning_result.free_binary_arcs),
                 "best_learning_rate": float(candidate.best_tuning["learning_rate"]),
                 "best_batch_size": int(candidate.best_tuning["batch_size"]),
                 "best_weight_decay": float(candidate.best_tuning["weight_decay"]),
@@ -1336,6 +1750,50 @@ def save_tuning_history_artifacts(
         plt.close(fig)
 
     return csv_path, plot_path
+
+
+def save_stage1_history_artifacts(
+    dataset_name: str,
+    history: Sequence[float],
+    output_dir: Path,
+) -> Path:
+    """Save Stage 1 best-score convergence as a small CSV artifact."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    history_df = pd.DataFrame(
+        {
+            "iteration": np.arange(1, len(history) + 1, dtype=int),
+            "best_low_fidelity_score": np.asarray(history, dtype=float),
+        }
+    )
+    csv_path = output_dir / f"torch_milp_pruning_stage1_history_{dataset_name}.csv"
+    history_df.to_csv(csv_path, index=False)
+    return csv_path
+
+
+def save_prediction_artifact(
+    dataset_name: str,
+    variant: str,
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    output_dir: Path,
+) -> Path:
+    """Save final official-test predictions for reproducible downstream figures."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    order = np.argsort(np.asarray(y_true, dtype=float))
+    prediction_df = pd.DataFrame(
+        {
+            "sample_index": np.arange(len(y_true), dtype=int),
+            "sort_index_by_true_rul": order.astype(int),
+            "y_true": np.asarray(y_true, dtype=float),
+            "y_pred": np.asarray(y_pred, dtype=float),
+            "absolute_error": np.abs(np.asarray(y_true, dtype=float) - np.asarray(y_pred, dtype=float)),
+        }
+    )
+    csv_path = output_dir / f"torch_milp_pruning_predictions_{dataset_name}_{variant}.csv"
+    prediction_df.to_csv(csv_path, index=False)
+    return csv_path
 
 
 def finalize_selected_candidate(
@@ -1427,6 +1885,20 @@ def finalize_selected_candidate(
         output_dir=output_dir,
         split_label="official test",
     )
+    dense_prediction_csv_path = save_prediction_artifact(
+        dataset_name=dataset_name,
+        variant="dense",
+        y_true=y_test,
+        y_pred=dense_metrics["predictions"],
+        output_dir=output_dir,
+    )
+    pruned_prediction_csv_path = save_prediction_artifact(
+        dataset_name=dataset_name,
+        variant="pruned",
+        y_true=y_test,
+        y_pred=pruned_metrics["predictions"],
+        output_dir=output_dir,
+    )
 
     dense_num_parameters = base.count_trainable_parameters(dense_outcome["model"])
     pruned_nonzero = count_pruned_nonzero_parameters(pruned_outcome["model"])
@@ -1438,11 +1910,13 @@ def finalize_selected_candidate(
             "official_test_mse": float(dense_metrics["mse"]),
             "official_test_mae": float(dense_metrics["mae"]),
             "num_parameters": int(dense_num_parameters),
+            "prediction_csv_path": str(dense_prediction_csv_path),
         },
         "selected_pruning_pipeline": {
             "reference_train_time_sec": float(reference_train_time),
             "pruning_method": str(pruning_result.pruning_method),
             "solver_status": pruning_result.solver_status,
+            "solve_strategy": str(pruning_result.solve_strategy),
             "success": bool(pruning_result.success),
             "fallback_used": bool(pruning_result.fallback_used),
             "active_input_arcs": int(pruning_result.active_input_arcs),
@@ -1454,6 +1928,9 @@ def finalize_selected_candidate(
             "solve_time_sec": float(pruning_result.solve_time_sec),
             "calibration_mae": float(pruning_result.calibration_mae),
             "objective_value": pruning_result.objective_value,
+            "fixed_keep_arcs": int(pruning_result.fixed_keep_arcs),
+            "fixed_drop_arcs": int(pruning_result.fixed_drop_arcs),
+            "free_binary_arcs": int(pruning_result.free_binary_arcs),
         },
         "pruned_final": {
             "train_time_sec": float(pruned_train_time),
@@ -1462,6 +1939,7 @@ def finalize_selected_candidate(
             "official_test_mae": float(pruned_metrics["mae"]),
             "nonzero_parameters": int(pruned_nonzero),
             "density": float(pruned_nonzero / max(dense_num_parameters, 1)),
+            "prediction_csv_path": str(pruned_prediction_csv_path),
         },
     }
 
@@ -1621,6 +2099,7 @@ def run_full_pipeline(
 
     output_dir = Path(config.output_dir)
     base.save_mlp_convergence_plot(search_result.history, dataset_name, output_dir)
+    stage1_history_csv_path = save_stage1_history_artifacts(dataset_name, search_result.history, output_dir)
     candidate_csv_path, candidate_plot_path = save_candidate_comparison_artifacts(
         dataset_name,
         candidate_results,
@@ -1637,9 +2116,10 @@ def run_full_pipeline(
         "rationale": (
             "PSO performs low-cost structure screening, the top-k architectures are "
             "pruned with cheap dense references on a small calibration subset, "
-            "using an exact MILP for one- and two-hidden-layer candidates when "
-            "the solver returns a solution, and only the pruned candidates are "
-            "tuned before final selection."
+            "using an exact MILP for one-hidden-layer candidates and an "
+            "activation-aware reduced-neighborhood exact MILP for two-hidden-layer "
+            "candidates when the solver returns a solution, and only the pruned "
+            "candidates are tuned before final selection."
         ),
         "config": asdict(config),
         "split_summary": {
@@ -1670,6 +2150,7 @@ def run_full_pipeline(
                 for candidate in stage1_candidates
             ],
             "time_seconds": float(stage1_time),
+            "history_csv_path": str(stage1_history_csv_path),
         },
         "stage2_prune_then_tune": {
             "candidate_count": int(len(candidate_results)),
@@ -1698,6 +2179,7 @@ def run_full_pipeline(
                     "pruning": {
                         "pruning_method": str(candidate.pruning_result.pruning_method),
                         "solver_status": candidate.pruning_result.solver_status,
+                        "solve_strategy": str(candidate.pruning_result.solve_strategy),
                         "success": bool(candidate.pruning_result.success),
                         "fallback_used": bool(candidate.pruning_result.fallback_used),
                         "active_input_arcs": int(candidate.pruning_result.active_input_arcs),
@@ -1707,6 +2189,9 @@ def run_full_pipeline(
                         "per_layer_active_arcs": candidate.pruning_result.per_layer_active_arcs,
                         "keep_ratio": float(candidate.pruning_result.keep_ratio),
                         "calibration_mae": float(candidate.pruning_result.calibration_mae),
+                        "fixed_keep_arcs": int(candidate.pruning_result.fixed_keep_arcs),
+                        "fixed_drop_arcs": int(candidate.pruning_result.fixed_drop_arcs),
+                        "free_binary_arcs": int(candidate.pruning_result.free_binary_arcs),
                     },
                     "tuning_runs": candidate.tuning_runs,
                     "best_history": candidate.best_history,
@@ -1724,6 +2209,7 @@ def run_full_pipeline(
             "density": float(selected_candidate.density),
             "total_candidate_time_sec": float(selected_candidate.total_candidate_time_sec),
             "pruning_method": str(selected_candidate.pruning_result.pruning_method),
+            "solve_strategy": str(selected_candidate.pruning_result.solve_strategy),
             "keep_ratio": float(selected_candidate.pruning_result.keep_ratio),
         },
         "final_comparison": final_results,
@@ -1766,6 +2252,7 @@ def run_full_pipeline(
         "Selected Validation MSE": float(selected_candidate.validation_mse),
         "Selected Validation MAE": float(selected_candidate.validation_mae),
         "Selected Pruning Method": str(selected_candidate.pruning_result.pruning_method),
+        "Selected Solve Strategy": str(selected_candidate.pruning_result.solve_strategy),
         "Dense Parameters": int(final_results["dense_final"]["num_parameters"]),
         "Dense Total Arcs": int(final_results["selected_pruning_pipeline"]["total_arcs"]),
         "Dense Final Test MSE": float(final_results["dense_final"]["official_test_mse"]),
@@ -1817,7 +2304,8 @@ def parse_args() -> argparse.Namespace:
         description=(
             "Experimental CMAPSS pipeline with PSO screening and a SciPy-MILP "
             "arc-pruning stage for 1-to-2-hidden-layer ReLU ANNs "
-            "(exact MILP when the solver succeeds, magnitude fallback otherwise)."
+            "(reduced-neighborhood exact MILP for 2-hidden-layer candidates by "
+            "default; magnitude fallback otherwise)."
         )
     )
     parser.add_argument("--data-root", type=Path, default=Path("data/CMAPSSData"))
@@ -1851,16 +2339,28 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tuning-learning-rates", nargs="+", type=float, default=[1e-3, 5e-4, 3e-4])
     parser.add_argument("--tuning-batch-sizes", nargs="+", type=int, default=[128])
     parser.add_argument("--tuning-weight-decays", nargs="+", type=float, default=[0.0, 1e-5, 1e-4])
-    parser.add_argument("--n-particles", type=int, default=3)
-    parser.add_argument("--n-iter", type=int, default=5)
+    parser.add_argument("--n-particles", type=int, default=5)
+    parser.add_argument("--n-iter", type=int, default=10)
     parser.add_argument("--pso-inertia", type=float, default=0.5)
     parser.add_argument("--pso-c1", type=float, default=1.5)
     parser.add_argument("--pso-c2", type=float, default=1.5)
     parser.add_argument("--complexity-penalty-weight", type=float, default=0.1)
-    parser.add_argument("--pruning-keep-fraction", type=float, default=0.5)
+    parser.add_argument("--pruning-keep-fraction", type=float, default=0.1)
     parser.add_argument("--pruning-calibration-size", type=int, default=16)
     parser.add_argument("--pruning-time-limit-sec", type=float, default=30.0)
-    parser.add_argument("--pruning-finetune-epochs", type=int, default=80)
+    parser.add_argument(
+        "--two-hidden-milp-strategy",
+        type=str,
+        default="reduced_neighborhood",
+        choices=["full_exact", "reduced_neighborhood"],
+    )
+    parser.add_argument("--reduced-milp-free-arc-fraction", type=float, default=0.1)
+    parser.add_argument("--reduced-milp-min-free-arcs", type=int, default=1000)
+    parser.add_argument("--reduced-milp-max-free-arcs", type=int, default=4000)
+    parser.add_argument("--activation-local-search-rounds", type=int, default=4)
+    parser.add_argument("--activation-local-search-pool-size", type=int, default=6)
+    parser.add_argument("--activation-local-search-max-evals", type=int, default=32)
+    parser.add_argument("--pruning-finetune-epochs", type=int, default=100)
     parser.add_argument("--pruning-finetune-patience", type=int, default=10)
     parser.add_argument("--pruning-exact-budget", action="store_true")
     parser.add_argument("--quiet", action="store_true")
@@ -1910,6 +2410,13 @@ def main() -> None:
         pruning_exact_budget=args.pruning_exact_budget,
         pruning_calibration_size=args.pruning_calibration_size,
         pruning_time_limit_sec=args.pruning_time_limit_sec,
+        two_hidden_milp_strategy=args.two_hidden_milp_strategy,
+        reduced_milp_free_arc_fraction=args.reduced_milp_free_arc_fraction,
+        reduced_milp_min_free_arcs=args.reduced_milp_min_free_arcs,
+        reduced_milp_max_free_arcs=args.reduced_milp_max_free_arcs,
+        activation_local_search_rounds=args.activation_local_search_rounds,
+        activation_local_search_pool_size=args.activation_local_search_pool_size,
+        activation_local_search_max_evals=args.activation_local_search_max_evals,
         pruning_finetune_epochs=args.pruning_finetune_epochs,
         pruning_finetune_patience=args.pruning_finetune_patience,
         pruning_max_stage1_candidates=args.top_k,

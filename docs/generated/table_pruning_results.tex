@@ -1,0 +1,16 @@
+\begin{table}[H]
+    \centering
+    \caption{Dense-versus-pruned performance for the selected architecture in each C-MAPSS subset. Validation metrics come from the internal held-out engine split; official-test metrics use the benchmark test partition once at the end.}
+    \label{tab:pruning_results}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{lrrrrrr}
+        \toprule
+        \textbf{Dataset} & \textbf{Dense Val. MSE} & \textbf{Pruned Val. MSE} & \textbf{Dense Test MSE} & \textbf{Pruned Test MSE} & \textbf{Dense Test MAE} & \textbf{Pruned Test MAE} \\
+        \midrule
+        FD001 & 464.43 & 256.76 & 300.80 & 318.84 & 13.41 & 13.18 \\
+        FD002 & 963.84 & 787.80 & 1302.35 & 1398.66 & 26.94 & 27.89 \\
+        FD003 & 287.68 & 211.78 & 249.70 & 296.20 & 12.04 & 13.53 \\
+        FD004 & 654.86 & 642.36 & 1413.67 & 1470.83 & 30.23 & 31.45 \\
+        \bottomrule
+    \end{tabular}}
+\end{table}

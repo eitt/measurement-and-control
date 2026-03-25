@@ -1,10 +1,10 @@
 | dataset | variant | architecture | hidden_layer_count | hidden_layers | pruning_method | parameters_or_nonzero | active_arcs | total_arcs | keep_ratio | validation_mse | validation_mae | official_test_mse | official_test_mae | fit_time_sec |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| FD001 | before_pruning_dense_ann | relu:[98, 90] | 2 | 98-90 | none | 38499 | 38310 | 38310 | 1.000000 | 1466.675537 | 30.628197 | 393.556763 | 14.512111 | 7.345848 |
-| FD001 | after_pruning_ann | relu:[98, 90] | 2 | 98-90 | magnitude_multilayer | 19344 | 19155 | 38310 | 0.500000 | 270.992493 | 12.197764 | 363.861053 | 13.918473 | 8.288148 |
-| FD002 | before_pruning_dense_ann | relu:[99, 100] | 2 | 99-100 | none | 48810 | 48610 | 48610 | 1.000000 | 1519.796021 | 33.505192 | 1658.454346 | 31.919640 | 21.437601 |
-| FD002 | after_pruning_ann | relu:[99, 100] | 2 | 99-100 | magnitude_multilayer | 24505 | 24305 | 48610 | 0.500000 | 767.408264 | 22.650566 | 1453.463623 | 28.914360 | 21.184443 |
-| FD003 | before_pruning_dense_ann | relu:[94, 99] | 2 | 94-99 | none | 37799 | 37605 | 37605 | 1.000000 | 636.594177 | 20.557026 | 270.296204 | 12.712638 | 9.886196 |
-| FD003 | after_pruning_ann | relu:[94, 99] | 2 | 94-99 | magnitude_multilayer | 18996 | 18802 | 37605 | 0.499987 | 249.019623 | 12.177488 | 309.977753 | 13.924731 | 11.334037 |
-| FD004 | before_pruning_dense_ann | relu:[95, 100] | 2 | 95-100 | none | 46846 | 46650 | 46650 | 1.000000 | 1147.435791 | 28.519026 | 1656.772705 | 32.305058 | 25.703888 |
-| FD004 | after_pruning_ann | relu:[95, 100] | 2 | 95-100 | magnitude_multilayer | 23521 | 23325 | 46650 | 0.500000 | 794.514832 | 23.160389 | 1609.881592 | 32.358215 | 32.352943 |
+| FD001 | before_pruning_dense_ann | relu:[98, 87] | 2 | 98-87 | none | 38199 | 38013 | 38013 | 1.000000 | 464.434357 | 17.149757 | 300.798706 | 13.411980 | 28.124877 |
+| FD001 | after_pruning_ann | relu:[98, 87] | 2 | 98-87 | magnitude_solver_fallback_after_reduced_exact | 3987 | 3801 | 38013 | 0.099992 | 256.761749 | 12.142019 | 318.835510 | 13.179683 | 62.849944 |
+| FD002 | before_pruning_dense_ann | relu:[100, 23] | 2 | 100-23 | none | 41447 | 41323 | 41323 | 1.000000 | 963.841309 | 26.040960 | 1302.345825 | 26.938828 | 50.811186 |
+| FD002 | after_pruning_ann | relu:[100, 23] | 2 | 100-23 | magnitude_solver_fallback_after_reduced_exact | 4256 | 4132 | 41323 | 0.099993 | 787.797058 | 22.885542 | 1398.657104 | 27.888117 | 86.015809 |
+| FD003 | before_pruning_dense_ann | relu:[100, 25] | 2 | 100-25 | none | 32651 | 32525 | 32525 | 1.000000 | 287.682800 | 12.790985 | 249.695892 | 12.043966 | 22.876329 |
+| FD003 | after_pruning_ann | relu:[100, 25] | 2 | 100-25 | magnitude_solver_fallback_after_reduced_exact | 3378 | 3252 | 32525 | 0.099985 | 211.776840 | 10.964574 | 296.196014 | 13.534018 | 58.038320 |
+| FD004 | before_pruning_dense_ann | relu:[100, 17] | 2 | 100-17 | none | 40835 | 40717 | 40717 | 1.000000 | 654.864746 | 20.621372 | 1413.673340 | 30.227074 | 58.237404 |
+| FD004 | after_pruning_ann | relu:[100, 17] | 2 | 100-17 | magnitude_solver_fallback_after_reduced_exact | 4190 | 4072 | 40717 | 0.100007 | 642.360840 | 20.687126 | 1470.834717 | 31.450867 | 106.841812 |

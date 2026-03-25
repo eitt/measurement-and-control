@@ -1,0 +1,20 @@
+\begin{table}[H]
+    \centering
+    \caption{Parameters of the activation-aware reduced-neighborhood heuristic used before the exact two-hidden-layer MILP.}
+    \label{tab:reduced_neighborhood_params}
+    \begin{tabular}{lll}
+        \toprule
+        \textbf{Symbol} & \textbf{Meaning} & \textbf{Value} \\
+        \midrule
+        $\alpha$ & Global pruning ratio & 0.90 \\
+        $\rho_{\mathrm{free}}$ & Free-arc fraction before clipping & 0.10 \\
+        $F_{\min}$ & Minimum free binary arcs & 1000 \\
+        $F_{\max}$ & Maximum free binary arcs & 4000 \\
+        $R_{\mathrm{LS}}$ & Local-search rounds & 4 \\
+        $P_{\mathrm{LS}}$ & Swap pool size per side & 6 \\
+        $E_{\max}$ & Maximum swap evaluations per round & 32 \\
+        Time limit & MILP time limit per solve (s) & 30.0 \\
+        Calibration & Teacher-matching subset size & 16 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
