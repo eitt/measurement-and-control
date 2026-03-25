@@ -1,0 +1,219 @@
+{
+  "dataset_name": "FD002",
+  "rationale": "PSO performs low-cost structure screening, the top-k architectures are pruned with cheap dense references on a small calibration subset, using exact MILP for one-hidden-layer candidates and magnitude fallback for deeper ones, and only the pruned candidates are tuned before final selection.",
+  "config": {
+    "seq_len": 30,
+    "validation_size": 0.2,
+    "clip_max": 125,
+    "random_seed": 1952,
+    "normalization_mode": "global_standard",
+    "min_hidden_layers": 1,
+    "max_hidden_layers": 3,
+    "min_neurons": 10,
+    "max_neurons": 100,
+    "activation_choices": [
+      "relu"
+    ],
+    "search_activation": false,
+    "batch_size": 128,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0,
+    "low_fidelity_epochs": 1,
+    "low_fidelity_patience": 1,
+    "top_k": 1,
+    "full_tuning_epochs": 1,
+    "full_tuning_patience": 1,
+    "retune_repeats": 1,
+    "tuning_learning_rates": [
+      0.001,
+      0.0005
+    ],
+    "tuning_batch_sizes": [
+      128
+    ],
+    "tuning_weight_decays": [
+      0.0
+    ],
+    "tuning_activation_choices": [
+      "relu"
+    ],
+    "final_train_epochs": 1,
+    "n_particles": 1,
+    "n_iter": 1,
+    "inertia": 0.5,
+    "c1": 1.5,
+    "c2": 1.5,
+    "complexity_penalty_weight": 0.1,
+    "device": "cpu",
+    "output_dir": "outputs\\torch_pytorch_milp_pruning_all4_smoke",
+    "verbose": false,
+    "training_fraction": 0.02,
+    "pruning_keep_fraction": 0.5,
+    "pruning_exact_budget": false,
+    "pruning_calibration_size": 4,
+    "pruning_time_limit_sec": 1.0,
+    "pruning_mip_rel_gap": 0.0,
+    "pruning_finetune_epochs": 1,
+    "pruning_finetune_patience": 1,
+    "pruning_max_stage1_candidates": 1
+  },
+  "split_summary": {
+    "split_method": "engine_level_from_official_train",
+    "normalization_mode": "global_standard",
+    "training_fraction": 0.02,
+    "official_train_units": 260,
+    "search_train_units": 208,
+    "validation_units": 52,
+    "search_train_windows": 744,
+    "validation_windows": 180,
+    "full_training_windows": 924,
+    "original_search_train_windows": 37201,
+    "sampled_search_train_windows": 744,
+    "original_validation_windows": 9018,
+    "sampled_validation_windows": 180,
+    "original_full_training_windows": 46219,
+    "sampled_full_training_windows": 924
+  },
+  "stage1": {
+    "best_architecture": "relu:[98, 21, 89]",
+    "best_low_fidelity_score": 7985.12799609375,
+    "best_validation_mse": 7980.58349609375,
+    "best_validation_mae": 78.11587524414062,
+    "top_k_candidates": [
+      {
+        "architecture": "relu:[98, 21, 89]",
+        "low_fidelity_score": 7985.12799609375,
+        "validation_mse": 7980.58349609375,
+        "validation_mae": 78.11587524414062,
+        "num_parameters": 42445
+      }
+    ],
+    "time_seconds": 0.0541114000370726
+  },
+  "stage2_prune_then_tune": {
+    "candidate_count": 1,
+    "candidate_artifacts": {
+      "csv_path": "outputs\\torch_pytorch_milp_pruning_all4_smoke\\torch_milp_pruning_candidates_FD002.csv",
+      "plot_path": "outputs\\torch_pytorch_milp_pruning_all4_smoke\\fig_torch_milp_pruning_candidates_FD002.png",
+      "history_csv_path": "outputs\\torch_pytorch_milp_pruning_all4_smoke\\torch_milp_pruning_histories_FD002.csv",
+      "history_plot_path": "outputs\\torch_pytorch_milp_pruning_all4_smoke\\fig_torch_milp_pruning_histories_FD002.png"
+    },
+    "candidate_results": [
+      {
+        "architecture": "relu:[98, 21, 89]",
+        "best_tuning": {
+          "learning_rate": 0.001,
+          "batch_size": 128,
+          "weight_decay": 0.0,
+          "activation": "relu",
+          "repeats": 1
+        },
+        "prepruning_validation_mse": 7969.2236328125,
+        "prepruning_validation_mae": 78.04419708251953,
+        "validation_mse": 7946.3564453125,
+        "validation_mae": 77.90046691894531,
+        "selection_score": 7948.5891453125,
+        "num_parameters": 42445,
+        "nonzero_parameters": 21327,
+        "density": 0.5024620096595594,
+        "reference_train_time_sec": 0.045453300001099706,
+        "pruning_solve_time_sec": 0.0,
+        "tuning_time_sec": 0.10847520001698285,
+        "total_candidate_time_sec": 0.15392850001808256,
+        "pruning": {
+          "pruning_method": "magnitude_multilayer",
+          "solver_status": "multilayer_magnitude_fallback",
+          "success": false,
+          "fallback_used": true,
+          "active_input_arcs": 17944,
+          "active_output_arcs": 65,
+          "active_total_arcs": 21118,
+          "total_arcs": 42236,
+          "per_layer_active_arcs": [
+            17944,
+            1514,
+            1595,
+            65
+          ],
+          "keep_ratio": 0.5,
+          "calibration_mae": NaN
+        },
+        "tuning_runs": [
+          {
+            "seed": 5952.0,
+            "validation_mse": 7946.3564453125,
+            "validation_mae": 77.90046691894531,
+            "selection_score": 7948.5891453125,
+            "epochs_ran": 1.0,
+            "nonzero_parameters": 21327.0,
+            "density": 0.5024620096595594
+          }
+        ],
+        "best_history": [
+          {
+            "epoch": 1.0,
+            "train_loss": 8360.534263692876,
+            "val_mse": 7946.3564453125
+          }
+        ]
+      }
+    ]
+  },
+  "selected_candidate": {
+    "architecture": "relu:[98, 21, 89]",
+    "best_tuning": {
+      "learning_rate": 0.001,
+      "batch_size": 128,
+      "weight_decay": 0.0,
+      "activation": "relu",
+      "repeats": 1
+    },
+    "validation_mse": 7946.3564453125,
+    "validation_mae": 77.90046691894531,
+    "selection_score": 7948.5891453125,
+    "nonzero_parameters": 21327,
+    "density": 0.5024620096595594,
+    "total_candidate_time_sec": 0.15392850001808256,
+    "pruning_method": "magnitude_multilayer",
+    "keep_ratio": 0.5
+  },
+  "final_comparison": {
+    "dense_final": {
+      "architecture": "relu:[98, 21, 89]",
+      "train_time_sec": 0.058315100031904876,
+      "official_test_mse": 9430.2451171875,
+      "official_test_mae": 80.8619155883789,
+      "num_parameters": 42445
+    },
+    "selected_pruning_pipeline": {
+      "reference_train_time_sec": 0.05729659995995462,
+      "pruning_method": "magnitude_multilayer",
+      "solver_status": "multilayer_magnitude_fallback",
+      "success": false,
+      "fallback_used": true,
+      "active_input_arcs": 17902,
+      "active_output_arcs": 69,
+      "active_total_arcs": 21118,
+      "total_arcs": 42236,
+      "per_layer_active_arcs": [
+        17902,
+        1514,
+        1633,
+        69
+      ],
+      "keep_ratio": 0.5,
+      "solve_time_sec": 0.0,
+      "calibration_mae": NaN,
+      "objective_value": null
+    },
+    "pruned_final": {
+      "train_time_sec": 0.06275380006991327,
+      "total_pipeline_time_sec": 0.12005040002986789,
+      "official_test_mse": 9434.0478515625,
+      "official_test_mae": 80.8794174194336,
+      "nonzero_parameters": 21327,
+      "density": 0.5024620096595594
+    }
+  },
+  "data_prep_time_seconds": 3.612631700001657
+}

@@ -1,2 +1,0 @@
-Dataset,Stage1 Best Candidate,Stage1 Low-Fidelity Score,Stage1 Validation MSE,Stage2 Selected Architecture,Stage2 Retuned Score,Stage2 Validation MSE,Final Test MSE,Final Test MAE,Stage1 Evaluations,Stage1 Time Sec,Stage2 Time Sec,Final Train Time Sec,Report Path
-FD001,"relu:[89, 89]",237.413509375,233.724609375,"relu:[99, 86]",210.95365981445312,206.90505981445312,3078.129150390625,48.1281852722168,6,29.76567360002082,49.36343779996969,42.099265000084415,outputs\torch_pytorch_engine_split_check\torch_two_stage_report_FD001.json

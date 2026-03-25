@@ -1,0 +1,2 @@
+rank,architecture,epoch,train_loss,val_mse
+1,relu:[49],1,8124.631019239324,7134.5693359375

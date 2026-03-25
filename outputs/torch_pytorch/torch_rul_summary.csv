@@ -1,2 +1,0 @@
-Dataset,Stage1 Best Candidate,Stage1 Low-Fidelity Score,Stage1 Validation MSE,Stage2 Selected Architecture,Stage2 Retuned Score,Stage2 Validation MSE,Final Test MSE,Final Test MAE,Stage1 Evaluations,Stage1 Time Sec,Stage2 Time Sec,Final Train Time Sec,Report Path
-FD001,"relu:[89, 89]",1218.070491796875,1214.381591796875,"relu:[89, 89]",974.15325546875,970.46435546875,1637.157958984375,35.378055572509766,2,4.416741199907847,1.4884029000531882,0.8051180000184104,outputs\torch_pytorch\torch_two_stage_report_FD001.json

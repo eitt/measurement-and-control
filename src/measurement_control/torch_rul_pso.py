@@ -46,8 +46,8 @@ plt.rcParams.update({"font.size": 12, "figure.dpi": 300})
 class SearchSpaceConfig:
     """Discrete ANN structure search space for Stage 1 PSO."""
 
-    min_hidden_layers: int = 1
-    max_hidden_layers: int = 2
+    min_hidden_layers: int = 2
+    max_hidden_layers: int = 3
     min_neurons: int = 10
     max_neurons: int = 100
     activation_choices: Tuple[str, ...] = ("relu",)
@@ -62,7 +62,7 @@ class SearchSpaceConfig:
 class PSOConfig:
     """Inertia-based PSO settings for the low-fidelity screening stage."""
 
-    n_particles: int = 5
+    n_particles: int = 20
     n_iter: int = 5
     inertia: float = 0.5
     c1: float = 1.5
@@ -97,8 +97,8 @@ class TrainingConfig:
     random_seed: int = 42
     normalization_mode: str = "global_standard"
 
-    min_hidden_layers: int = 1
-    max_hidden_layers: int = 2
+    min_hidden_layers: int = 2
+    max_hidden_layers: int = 3
     min_neurons: int = 10
     max_neurons: int = 100
     activation_choices: Tuple[str, ...] = ("relu",)
@@ -121,7 +121,7 @@ class TrainingConfig:
 
     final_train_epochs: int = 100
 
-    n_particles: int = 5
+    n_particles: int = 20
     n_iter: int = 5
     inertia: float = 0.5
     c1: float = 1.5
@@ -1462,8 +1462,8 @@ def parse_args() -> argparse.Namespace:
         default="outputs/torch_pytorch",
         help="Directory where plots, CSV summaries, and reports will be saved.",
     )
-    parser.add_argument("--min-hidden-layers", type=int, default=1, help="Minimum hidden-layer count.")
-    parser.add_argument("--max-hidden-layers", type=int, default=2, help="Maximum hidden-layer count.")
+    parser.add_argument("--min-hidden-layers", type=int, default=2, help="Minimum hidden-layer count.")
+    parser.add_argument("--max-hidden-layers", type=int, default=3, help="Maximum hidden-layer count.")
     parser.add_argument("--min-neurons", type=int, default=10, help="Minimum neurons per hidden layer.")
     parser.add_argument("--max-neurons", type=int, default=100, help="Maximum neurons per hidden layer.")
     parser.add_argument(
@@ -1544,7 +1544,7 @@ def parse_args() -> argparse.Namespace:
         default=[0.0],
         help="Weight decays explored during Stage 2.",
     )
-    parser.add_argument("--n-particles", type=int, default=5, help="PSO swarm size.")
+    parser.add_argument("--n-particles", type=int, default=20, help="PSO swarm size.")
     parser.add_argument("--n-iter", type=int, default=5, help="PSO iteration count.")
     parser.add_argument("--pso-inertia", type=float, default=0.5, help="PSO inertia coefficient.")
     parser.add_argument("--pso-c1", type=float, default=1.5, help="PSO cognitive coefficient.")

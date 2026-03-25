@@ -115,7 +115,7 @@ python scripts/run_torch_pipeline.py --data-root data/CMAPSSData
 
 ### Example reproducible screening + retuning run
 ```bash
-python scripts/run_torch_pipeline.py --skip-install --data-root data/CMAPSSData --datasets FD001 --n-particles 5 --n-iter 5 --low-fidelity-epochs 15 --top-k 3 --full-tuning-epochs 100 --final-train-epochs 100 --complexity-penalty-weight 0.1
+python scripts/run_torch_pipeline.py --skip-install --data-root data/CMAPSSData --datasets FD001 --n-particles 20 --n-iter 5 --low-fidelity-epochs 15 --top-k 3 --full-tuning-epochs 100 --final-train-epochs 100 --complexity-penalty-weight 0.1
 ```
 
 ### Useful controls
@@ -132,9 +132,60 @@ python scripts/run_torch_pipeline.py --skip-install --data-root data/CMAPSSData 
 - `--complexity-penalty-weight`
 - `--seed`
 
+Current main-workflow defaults:
+- `20` PSO particles
+- `2` to `3` hidden layers
+- `10` to `100` neurons per hidden layer
+
 ### Outputs
 Each dataset run writes:
 - `outputs/torch_pytorch/torch_rul_summary.csv`
 - `outputs/torch_pytorch/torch_two_stage_report_<DATASET>.json`
 - `outputs/torch_pytorch/fig_torch_mlp_convergence_<DATASET>.png`
 - `outputs/torch_pytorch/fig_torch_rul_prediction_<DATASET>.png`
+
+## Experimental MILP Pruning Workflow
+An alternate experimental pipeline is available for testing ANN pruning after Stage 1 architecture screening:
+- Module: `src/measurement_control/torch_rul_pso_milp_pruning.py`
+- Entrypoint: `scripts/run_torch_milp_pruning_pipeline.py`
+
+This variant keeps the official NASA train/test split and uses:
+- ReLU ANNs with `1` to `2` hidden layers and `10` to `100` neurons per layer
+- a default `50`-particle PSO screen in this pruning branch
+- Stage 1 PSO screening on the dense architecture
+- Stage 2 cheap dense reference fits and MILP pruning for the top-k PSO candidates
+- Stage 3 tuning of the pruned candidates only
+- final selection by validation performance plus complexity penalty
+- side-by-side dense vs pruned timing and official-test metrics for the selected architecture
+- a default `--training-fraction 0.3` development mode so this experimental branch uses more signal than the old 10% fast screen without forcing a full-data run by default
+- Stage 3 also stores per-epoch training loss and validation-MSE histories for the top-k pruned candidates
+- by default the pruning runner evaluates all four CMAPSS subsets: `FD001`, `FD002`, `FD003`, and `FD004`
+
+Important limitation:
+- This is a tractable approximation of the pruning idea, not a full large-scale MIQP implementation. The pruning MILP uses a linear teacher-matching objective on a calibration subset so it can be solved with the local SciPy/HiGHS stack.
+- The `training_fraction` subsamples windowed training, validation, and full-training sets only inside this pruning branch. The official NASA test split remains untouched.
+- The current pruning defaults are intentionally less brittle on FD002 and FD003 than the earlier fast setup: `training_fraction=0.3`, `tuning_learning_rates=(1e-3, 5e-4, 3e-4)`, `tuning_weight_decays=(0.0, 1e-5, 1e-4)`, `full_tuning_epochs=120`, `full_tuning_patience=12`, `pruning_finetune_epochs=80`, and `pruning_finetune_patience=10`. For a final full-data run, set `--training-fraction 1.0`.
+- The candidate-comparison artifacts now include a per-dataset CSV and a small plot summarizing top-k validation performance and candidate runtime.
+- Exact MILP pruning is now implemented for both `1`- and `2`-hidden-layer candidates. If the solver reaches the time limit or does not return a solution, the branch falls back to a transparent global magnitude-pruning mask so the run can still complete end to end.
+- To avoid benchmark leakage, the branch stores training and validation learning curves during Stage 3 and reserves the official test split for one final evaluation only.
+
+Example run:
+```bash
+python scripts/run_torch_milp_pruning_pipeline.py --skip-install --data-root data/CMAPSSData --normalization-mode global_standard
+```
+
+Direct module-file execution also works now:
+```bash
+python src/measurement_control/torch_rul_pso_milp_pruning.py --data-root data/CMAPSSData
+```
+
+Outputs include:
+- `outputs/torch_pytorch_milp_pruning/torch_milp_pruning_summary.csv`
+- `outputs/torch_pytorch_milp_pruning/torch_milp_pruning_before_after_summary.csv`
+- `outputs/torch_pytorch_milp_pruning/torch_milp_pruning_before_after_summary.md`
+- `outputs/torch_pytorch_milp_pruning/torch_milp_pruning_report_<DATASET>.json`
+- `outputs/torch_pytorch_milp_pruning/torch_milp_pruning_candidates_<DATASET>.csv`
+- `outputs/torch_pytorch_milp_pruning/torch_milp_pruning_histories_<DATASET>.csv`
+- `outputs/torch_pytorch_milp_pruning/fig_torch_milp_pruning_candidates_<DATASET>.png`
+- `outputs/torch_pytorch_milp_pruning/fig_torch_milp_pruning_histories_<DATASET>.png`
+- dense and pruned official-test prediction plots
