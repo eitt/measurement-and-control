@@ -72,9 +72,15 @@ def load_cmapss(fd_path: str) -> pd.DataFrame:
     df = pd.read_csv(fd_path, sep=r"\s+", header=None, names=col_names)
     return df
 
-def compute_rul(train_df: pd.DataFrame, clip_max: int = 125) -> pd.Series:
+def load_cmapss_rul(fd_path: str) -> pd.DataFrame:
+    col_names = ['rul']
+    df = pd.read_csv(fd_path, sep=r"\s+", header=None, names=col_names)
+    return df
+
+def compute_rul(train_df: pd.DataFrame, grouped: pd.DataFrame = None, clip_max: int = 125) -> pd.Series:
     # Step 1.2: Compute max cycle by engine id.
-    grouped = train_df.groupby('col_1')['col_2'].max()
+    if grouped is None:
+        grouped = train_df.groupby('col_1')['col_2'].max()
     max_cycle = train_df['col_1'].map(grouped)
     rul = (max_cycle - train_df['col_2']).clip(upper=clip_max)
     return rul
@@ -179,24 +185,28 @@ def process_dataset(dataset_name: str) -> Dict:
     
     train_path = f'data/CMAPSSData/train_{dataset_name}.txt'
     test_path = f'data/CMAPSSData/test_{dataset_name}.txt'
+    test_rul_path = f'data/CMAPSSData/RUL_{dataset_name}.txt'
     try:
         train_df = load_cmapss(train_path)
         test_df = load_cmapss(test_path)
+        test_rul_df = load_cmapss_rul(test_rul_path)
     except FileNotFoundError:
         print(f"Files for {dataset_name} not found.")
         return {}
     
     # Step 5.2: Compute Remaining Useful Life targets.
     rul = compute_rul(train_df)
+    test_rul = compute_rul(test_df, test_rul_df)
     
     # Feature Selection
     cols_to_drop = ['col_6', 'col_8', 'col_9', 'col_10', 'col_14', 'col_15', 'col_17', 'col_20', 'col_21', 'col_22', 'col_23']
     if not keep_settings:
         cols_to_drop.extend(['col_3', 'col_4', 'col_5'])
     
-    df_red = train_df.drop(columns=cols_to_drop, errors='ignore')
+    df_train_red = train_df.drop(columns=cols_to_drop, errors='ignore')
+    df_test_red = test_df.drop(columns=cols_to_drop, errors='ignore')
     
-    X, y = build_sequences(df_red, rul, seq_len=30)
+    X, y = build_sequences(df_train_red, rul, seq_len=30)
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
     
     # Optimization & Training
@@ -241,4 +251,3 @@ for ds in ['FD001']: #, 'FD002', 'FD003', 'FD004']:
 
 results_df = pd.DataFrame(results)
 print("\nSummary of RUL Prediction Results:")
-display(results_df)
