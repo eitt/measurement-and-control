@@ -13,6 +13,9 @@ from typing import Tuple, List, Dict
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+sns.set_theme(style="whitegrid")
+plt.rcParams.update({'font.size': 12, 'figure.dpi': 300})
+
 class TorchMLPRegressor(nn.Module):
     def __init__(self, input_size, hidden_sizes, output_size=1):
         super().__init__()
@@ -60,9 +63,6 @@ class MLPRegressor:
 
         return pred.numpy().flatten()
 
-sns.set_theme(style="whitegrid")
-plt.rcParams.update({'font.size': 12, 'figure.dpi': 300})
-
 # Step 1: Define data-loading and RUL-target helper functions.
 # Step 2: Build normalized rolling sequences for MLP training.
 
@@ -77,10 +77,11 @@ def load_cmapss_rul(fd_path: str) -> pd.DataFrame:
     df = pd.read_csv(fd_path, sep=r"\s+", header=None, names=col_names)
     return df
 
-def compute_rul(train_df: pd.DataFrame, grouped: pd.DataFrame = None, clip_max: int = 125) -> pd.Series:
+def compute_rul(train_df: pd.DataFrame, base_rul: pd.Series = None, clip_max: int = 125) -> pd.Series:
     # Step 1.2: Compute max cycle by engine id.
-    if grouped is None:
-        grouped = train_df.groupby('col_1')['col_2'].max()
+    grouped = train_df.groupby('col_1')['col_2'].max()
+    if base_rul is not None:
+        grouped = grouped + base_rul
     max_cycle = train_df['col_1'].map(grouped)
     rul = (max_cycle - train_df['col_2']).clip(upper=clip_max)
     return rul
@@ -190,14 +191,16 @@ def process_dataset(dataset_name: str) -> Dict:
         train_df = load_cmapss(train_path)
         test_df = load_cmapss(test_path)
         test_rul_df = load_cmapss_rul(test_rul_path)
+        test_rul_series = test_rul_df['rul']
+        test_rul_series.index = test_rul_series.index + 1
     except FileNotFoundError:
         print(f"Files for {dataset_name} not found.")
         return {}
     
     # Step 5.2: Compute Remaining Useful Life targets.
-    rul = compute_rul(train_df)
-    test_rul = compute_rul(test_df, test_rul_df)
-    
+    train_rul = compute_rul(train_df)
+    test_rul = compute_rul(test_df, test_rul_series)
+
     # Feature Selection
     cols_to_drop = ['col_6', 'col_8', 'col_9', 'col_10', 'col_14', 'col_15', 'col_17', 'col_20', 'col_21', 'col_22', 'col_23']
     if not keep_settings:
@@ -206,14 +209,25 @@ def process_dataset(dataset_name: str) -> Dict:
     df_train_red = train_df.drop(columns=cols_to_drop, errors='ignore')
     df_test_red = test_df.drop(columns=cols_to_drop, errors='ignore')
     
-    X, y = build_sequences(df_train_red, rul, seq_len=30)
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+    #X, y = build_sequences(df_train_red, train_rul, seq_len=30)
+    #X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_train, y_train = build_sequences(df_train_red, train_rul, seq_len=30)
+    X_val, y_val = build_sequences(df_test_red, test_rul, seq_len=30)
+    print('--------------------------------------------------------------')
+    print('X_train\n', X_train)
+    print('--------------------------------------------------------------')
+    print('y_train\n', y_train)
+    print('--------------------------------------------------------------')
+    print('X_val\n', X_val)
+    print('--------------------------------------------------------------')
+    print('y_val\n', y_val)
+    print('--------------------------------------------------------------')
     
     # Optimization & Training
     print("Optimizing MLP Architecture...")
     # Step 5.3: Optimize MLP hidden layers with PSO.
     best_hidden, best_score, mlp_history = pso_optimize(X_train, X_val, y_train, y_val, n_particles=5, n_iter=5)
-    print(f"Best Config: {best_hidden}, MSE: {best_score:.2f}")
+    print(f"Best Config: {best_hidden}, MSE: {best_score:.2f}, RMSE: {(best_score**0.5):.2f}")
     
     # Plot Convergence
     plt.figure(figsize=(8, 4))
@@ -229,7 +243,8 @@ def process_dataset(dataset_name: str) -> Dict:
     
     mae = mean_absolute_error(y_val, preds)
     mse = mean_squared_error(y_val, preds)
-    print(f"Final Validation MSE: {mse:.2f}")
+    rmse = mse**0.5
+    print(f"Final Validation MSE: {mse:.2f}, RMSE: {rmse:.2f}")
     
     # Plot Predictions
     plt.figure(figsize=(10, 5))
