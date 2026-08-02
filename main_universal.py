@@ -59,7 +59,8 @@ def load_data(dataset_name):
     # Read the data from the text file
     return pd.read_csv(path, sep=r"\s+", header=None, names=col_names)
 
-def process_data(df, clip_max=125, seq_len=30):
+def process_data(df, clip_max=125, seq_len=30, validation_size=0.2,
+                 random_state=42, return_split=False):
     """
     Processes the raw data by calculating RUL, selecting features,
     and building sequences for the model.
@@ -71,6 +72,15 @@ def process_data(df, clip_max=125, seq_len=30):
     # Calculate RUL and clip it at a maximum value
     rul = (max_cycle - df['col_2']).clip(upper=clip_max)
     
+    # Split by engine before fitting feature selection/scaling.  Splitting
+    # windows (or rows) would leak different cycles from the same engine.
+    units = np.sort(df['col_1'].unique())
+    train_units, val_units = train_test_split(
+        units, test_size=validation_size, random_state=random_state
+    )
+    train_mask = df['col_1'].isin(train_units)
+    val_mask = df['col_1'].isin(val_units)
+
     # Feature Selection (fixed literature-derived baseline)
     # DATA_CARD.md documents the raw C-MAPSS schema:
     # - col_3..col_5 are the 3 operational settings.
@@ -96,29 +106,34 @@ def process_data(df, clip_max=125, seq_len=30):
     ]
     existing_drop = [c for c in cols_to_drop if c in df.columns]
     df_clean = df.drop(columns=existing_drop)
-    
-    # Sequence Building
-    feature_cols = df_clean.columns[2:]
+
+    # Remove constant/near-constant channels using training data only.
+    # This avoids selecting a channel because of information in validation.
+    candidate_features = list(df_clean.columns[2:])
+    train_stds = df_clean.loc[train_mask, candidate_features].std()
+    feature_cols = train_stds[train_stds > 1e-5].index.tolist()
+    if not feature_cols:
+        raise ValueError("No non-constant features remain after preprocessing.")
+
     scaler = MinMaxScaler()
-    # Fit scaling on the whole dataset for simplicity
-    scaled_data = scaler.fit_transform(df_clean[feature_cols])
-    df_scaled = pd.DataFrame(scaled_data, columns=feature_cols)
-    df_scaled['id'] = df['col_1'].values
-    
-    sequences, targets = [], []
-    # Create sequences for each engine unit
-    for unit in df_scaled['id'].unique():
-        unit_df = df_scaled[df_scaled['id'] == unit].drop(columns=['id'])
-        unit_rul = rul[df['col_1'] == unit]
-        
-        unit_arr = unit_df.values
-        unit_rul_arr = unit_rul.values
-        
-        for i in range(len(unit_arr) - seq_len + 1):
-            sequences.append(unit_arr[i:i+seq_len].reshape(-1))
-            targets.append(unit_rul_arr[i+seq_len-1])
-            
-    return np.array(sequences), np.array(targets)
+    scaler.fit(df_clean.loc[train_mask, feature_cols])
+
+    def build_windows(unit_ids):
+        sequences, targets = [], []
+        for unit in unit_ids:
+            unit_mask = df_clean['col_1'] == unit
+            unit_arr = scaler.transform(df_clean.loc[unit_mask, feature_cols])
+            unit_rul = rul.loc[unit_mask].to_numpy()
+            for i in range(len(unit_arr) - seq_len + 1):
+                sequences.append(unit_arr[i:i + seq_len].reshape(-1))
+                targets.append(unit_rul[i + seq_len - 1])
+        return np.asarray(sequences, dtype=np.float32), np.asarray(targets, dtype=np.float32)
+
+    X_train, y_train = build_windows(train_units)
+    X_val, y_val = build_windows(val_units)
+    if return_split:
+        return X_train, y_train, X_val, y_val
+    return np.concatenate([X_train, X_val]), np.concatenate([y_train, y_val])
 
 # --- PSO FOR MLP ---
 class ParticleMLP:
@@ -130,13 +145,18 @@ class ParticleMLP:
         self.best_pos = self.position.copy()
         self.best_score = np.inf
 
-def optimize_mlp_pso(X, y, n_particles=3, n_iter=3):
+def optimize_mlp_pso(X, y, X_val=None, y_val=None, n_particles=3, n_iter=3):
     """
     Optimizes MLP architecture using Particle Swarm Optimization (PSO).
     Reduced particles/iterations for speed in this demonstration.
     """
-    # Split data for training and validation
-    X_tr, X_val, y_tr, y_val = train_test_split(X, y, test_size=0.2)
+    # X/y are already engine-disjoint when validation data is supplied.
+    if X_val is None or y_val is None:
+        X_tr, X_val, y_tr, y_val = train_test_split(
+            X, y, test_size=0.2, random_state=42
+        )
+    else:
+        X_tr, y_tr = X, y
     dim = 2  # Two hidden layers
     bounds = (10, 100)  # Number of neurons per layer
     
@@ -258,16 +278,18 @@ def main():
         df = load_data(ds_name)
         if df is None: continue
         
-        X, y = process_data(df)
-        print(f"   Samples: {X.shape[0]}, Features: {X.shape[1]}")
-        
-        # Split data for final evaluation
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        X_train, y_train, X_test, y_test = process_data(
+            df, return_split=True, random_state=42
+        )
+        print(f"   Train samples: {X_train.shape[0]}, Validation samples: {X_test.shape[0]}, Features: {X_train.shape[1]}")
         
         # 2. Optimization (PSO) for MLP architecture
         print("   Running PSO for Architecture Search...")
         # Use a subset of data for faster optimization
-        best_arch, time_pso = optimize_mlp_pso(X_train[:2000], y_train[:2000])
+        best_arch, time_pso = optimize_mlp_pso(
+            X_train[:2000], y_train[:2000],
+            X_val=X_test, y_val=y_test
+        )
         
         # 3. Final Training of the best model
         print(f"   Training Final Model {best_arch}...")

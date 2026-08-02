@@ -86,17 +86,20 @@ def compute_rul(train_df: pd.DataFrame, base_rul: pd.Series = None, clip_max: in
     rul = (max_cycle - train_df['col_2']).clip(upper=clip_max)
     return rul
 
-def build_sequences(df: pd.DataFrame, rul: pd.Series, seq_len: int = 30) -> Tuple[np.ndarray, np.ndarray]:
+def build_sequences(df: pd.DataFrame, rul: pd.Series, seq_len: int = 30,
+                    scaler: MinMaxScaler = None) -> Tuple[np.ndarray, np.ndarray]:
+    """Build flattened windows using a scaler fitted on training data."""
     feature_cols = df.columns[2:]
     units = df['col_1'].unique()
     sequences: List[np.ndarray] = []
     targets: List[float] = []
+    if scaler is None:
+        scaler = MinMaxScaler().fit(df[feature_cols])
     # Step 2.1: Process one engine trajectory at a time.
     for unit in units:
         unit_df = df[df['col_1'] == unit]
         unit_rul = rul[unit_df.index]
-        scaler = MinMaxScaler()
-        scaled = scaler.fit_transform(unit_df[feature_cols])
+        scaled = scaler.transform(unit_df[feature_cols])
         # Step 2.2: Slide sequence window and collect labels.
         for i in range(len(unit_df) - seq_len + 1):
             seq_x = scaled[i:i + seq_len].reshape(-1)
@@ -106,6 +109,16 @@ def build_sequences(df: pd.DataFrame, rul: pd.Series, seq_len: int = 30) -> Tupl
     X = np.array(sequences)
     y = np.array(targets)
     return X, y
+
+
+def select_non_flat_features(df: pd.DataFrame, threshold: float = 1e-5) -> List[str]:
+    """Select features using standard deviations from training data only."""
+    feature_cols = list(df.columns[2:])
+    stds = df[feature_cols].std()
+    selected = stds[stds > threshold].index.tolist()
+    if not selected:
+        raise ValueError("No non-constant CMAPSS features remain.")
+    return selected
 
 # Step 3: Define PSO particle structure and optimization routine.
 # Step 4: Train final MLP using best architecture from PSO.
@@ -185,43 +198,52 @@ def process_dataset(dataset_name: str) -> Dict:
     keep_settings = metadata.get(dataset_name, {}).get('keep_settings', False)
     
     train_path = f'data/CMAPSSData/train_{dataset_name}.txt'
-    test_path = f'data/CMAPSSData/test_{dataset_name}.txt'
-    test_rul_path = f'data/CMAPSSData/RUL_{dataset_name}.txt'
     try:
         train_df = load_cmapss(train_path)
-        test_df = load_cmapss(test_path)
-        test_rul_df = load_cmapss_rul(test_rul_path)
-        test_rul_series = test_rul_df['rul']
-        test_rul_series.index = test_rul_series.index + 1
     except FileNotFoundError:
         print(f"Files for {dataset_name} not found.")
         return {}
     
     # Step 5.2: Compute Remaining Useful Life targets.
     train_rul = compute_rul(train_df)
-    test_rul = compute_rul(test_df, test_rul_series)
-
     # Feature Selection
     cols_to_drop = ['col_6', 'col_8', 'col_9', 'col_10', 'col_14', 'col_15', 'col_17', 'col_20', 'col_21', 'col_22', 'col_23']
     if not keep_settings:
         cols_to_drop.extend(['col_3', 'col_4', 'col_5'])
     
-    df_train_red = train_df.drop(columns=cols_to_drop, errors='ignore')
-    df_test_red = test_df.drop(columns=cols_to_drop, errors='ignore')
+    reduced = train_df.drop(columns=cols_to_drop, errors='ignore')
     
     #X, y = build_sequences(df_train_red, train_rul, seq_len=30)
     #X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
-    X_train, y_train = build_sequences(df_train_red, train_rul, seq_len=30)
-    X_val, y_val = build_sequences(df_test_red, test_rul, seq_len=30)
-    print('--------------------------------------------------------------')
-    print('X_train\n', X_train)
-    print('--------------------------------------------------------------')
-    print('y_train\n', y_train)
-    print('--------------------------------------------------------------')
-    print('X_val\n', X_val)
-    print('--------------------------------------------------------------')
-    print('y_val\n', y_val)
-    print('--------------------------------------------------------------')
+    
+    # Corrección del objetivo RUL
+    
+    #En las etapas iniciales de operación, la máquina/motor está completamente sana. Sin embargo, un RUL estrictamente lineal asigna un 
+    # valor decreciente desde el primer ciclo (ej. RUL = 250). Dado que los sensores no muestran ninguna señal de degradación al inicio, 
+    # es imposible para el modelo aprender la relación entre sensores sanos y un RUL de 250, generando un error cuadrático (MSE) 
+    # gigantesco durante las primeras etapas.
+    # Split complete engine trajectories before creating sliding windows.
+    units = np.sort(reduced['col_1'].unique())
+    train_units, val_units = train_test_split(
+        units, test_size=0.2, random_state=42
+    )
+    df_train_red = reduced[reduced['col_1'].isin(train_units)].copy()
+    df_val_red = reduced[reduced['col_1'].isin(val_units)].copy()
+
+    # Remove flat sensors and fit normalization on training engines only.
+    selected_features = select_non_flat_features(df_train_red)
+    df_train_red = df_train_red[['col_1', 'col_2', *selected_features]]
+    df_val_red = df_val_red[['col_1', 'col_2', *selected_features]]
+    scaler = MinMaxScaler().fit(df_train_red[selected_features])
+
+    # compute_rul applies the piecewise-linear target clipping at 125.
+    X_train, y_train = build_sequences(
+        df_train_red, train_rul, seq_len=30, scaler=scaler
+    )
+    X_val, y_val = build_sequences(
+        df_val_red, train_rul, seq_len=30, scaler=scaler
+    )
+    print(f"Train windows: {X_train.shape}; validation windows: {X_val.shape}")
     
     # Optimization & Training
     print("Optimizing MLP Architecture...")

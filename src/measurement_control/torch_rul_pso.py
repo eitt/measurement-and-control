@@ -347,7 +347,17 @@ def select_features_by_dataset(train_df: pd.DataFrame, dataset_name: str) -> pd.
     ]
     if not keep_settings:
         cols_to_drop.extend(["col_3", "col_4", "col_5"])
-    return train_df.drop(columns=cols_to_drop, errors="ignore")
+    reduced = train_df.drop(columns=cols_to_drop, errors="ignore")
+
+    # Remove flat/near-flat channels using the official training partition.
+    # The function is called before the engine split, but only on the official
+    # train file; validation and test rows never influence this decision.
+    feature_cols = list(reduced.columns[2:])
+    non_flat = reduced[feature_cols].std() > 1e-5
+    selected = non_flat[non_flat].index.tolist()
+    if not selected:
+        raise ValueError(f"{dataset_name}: no non-constant features remain.")
+    return reduced[["col_1", "col_2", *selected]]
 
 
 def fit_feature_scaler(df: pd.DataFrame, normalization_mode: str) -> object:
