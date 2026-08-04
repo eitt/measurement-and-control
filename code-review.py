@@ -211,14 +211,25 @@ def test_final_model(model, dataset_name, cols_to_drop, selected_features, scale
         df_test_red = df_test_red[['col_1', 'col_2', *selected_features]]
 
         # compute_rul applies the piecewise-linear target clipping at 125.
-        X_test, y_test = build_sequences(df_test_red, test_rul, seq_len=30, scaler=scaler, only_last=True)
+        X_test, _ = build_sequences(df_test_red, test_rul, seq_len=30, scaler=scaler, only_last=True)
+        y_test = test_rul_df['rul'].to_numpy()
 
         test_preds = model.predict(X_test)
 
         test_mae = mean_absolute_error(y_test, test_preds)
         test_mse = mean_squared_error(y_test, test_preds)
         test_rmse = test_mse**0.5
-        print(f"Final Test MSE: {test_mse:.2f}, RMSE: {test_rmse:.2f}")
+        print(f"Final Test MSE: {test_mse:.2f}, RMSE: {test_rmse:.2f}, MAE: {test_mae:.2f}")
+
+        # Plot Predictions
+        plt.figure(figsize=(10, 5))
+        plt.plot(y_test, '-', label='True', color='red')
+        plt.plot(test_preds, '-', label='Pred', color='blue')
+        plt.title(f'RUL Prediction: {dataset_name}')
+        plt.xlabel('Engine ID')
+        plt.ylabel('RUL')
+        plt.legend(fontsize='xx-small', loc='upper right')
+        plt.show()
     except FileNotFoundError:
         print(f"Files for {dataset_name} not found.")
 
@@ -299,7 +310,7 @@ def process_dataset(dataset_name: str) -> Dict:
     mae = mean_absolute_error(y_val, preds)
     mse = mean_squared_error(y_val, preds)
     rmse = mse**0.5
-    print(f"Final Validation MSE: {mse:.2f}, RMSE: {rmse:.2f}")
+    print(f"Final Validation MSE: {mse:.2f}, RMSE: {rmse:.2f}, MAE: {mae:.2f}")
     
     # Plot Predictions
     plt.figure(figsize=(10, 5))
