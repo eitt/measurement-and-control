@@ -33,14 +33,14 @@ class TorchMLPRegressor(nn.Module):
         self.network = nn.Sequential(*layers)
 
     def forward(self, x):
-        return self.network(x)
+        return self.network(x)* torch.sigmoid(self.network(x))
 
 class MLPRegressor:
     def __init__(self, input_size, hidden_sizes, learning_rate=0.001, epochs=1000):
         self.model = TorchMLPRegressor(input_size, hidden_sizes)
         self.epochs = epochs
-        self.criterion = nn.MSELoss()
-        self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
+        self.criterion = nn.SmoothL1Loss(beta=5.0)
+        self.optimizer = optim.AdamW(self.model.parameters(), lr=learning_rate)
 
     def fit(self, X, y):
         X = torch.tensor(X, dtype=torch.float32)
