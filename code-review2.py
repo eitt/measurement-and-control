@@ -2270,38 +2270,38 @@ def test_final_model(
     X_test = derived_scaler.transform(X_test_raw).astype(np.float32)
 
     y_test_raw = raw_rul_lookup.loc[test_units].to_numpy(dtype=np.float32)
-    y_test = np.clip(y_test_raw, 0.0, float(RUL_MAX))
+    # y_test = np.clip(y_test_raw, 0.0, float(RUL_MAX))
 
     raw_predictions = model.predict_raw(X_test)
-    clipped_predictions = np.clip(raw_predictions, 0.0, float(RUL_MAX))
+    # clipped_predictions = np.clip(raw_predictions, 0.0, float(RUL_MAX))
 
-    consistent_metrics = regression_metrics(y_test, clipped_predictions)
-    raw_target_metrics = regression_metrics(y_test_raw, raw_predictions)
-    test_nasa = nasa_score(y_test, clipped_predictions)
+    consistent_metrics = regression_metrics(y_test_raw, raw_predictions) # consistent_metrics = regression_metrics(y_test, clipped_predictions)
+    # raw_target_metrics = regression_metrics(y_test_raw, raw_predictions)
+    test_nasa = nasa_score(y_test_raw, raw_predictions) # test_nasa = nasa_score(y_test, clipped_predictions)
 
     elapsed = time.time() - start_time
     print(
-        f"  RUL limitado a {RUL_MAX}: MSE={consistent_metrics['mse']:.2f}, "
+        f"  RUL: MSE={consistent_metrics['mse']:.2f}, " # f"  RUL limitado a {RUL_MAX}: MSE={consistent_metrics['mse']:.2f}, "
         f"RMSE={consistent_metrics['rmse']:.2f}, "
         f"MAE={consistent_metrics['mae']:.2f}, NASA={test_nasa:.2f}"
     )
-    print(
-        "  Referencia sobre RUL original: "
-        f"MSE={raw_target_metrics['mse']:.2f}, "
-        f"RMSE={raw_target_metrics['rmse']:.2f}, "
-        f"MAE={raw_target_metrics['mae']:.2f}"
-    )
+    # print(
+    #     "  Referencia sobre RUL original: "
+    #     f"MSE={raw_target_metrics['mse']:.2f}, "
+    #     f"RMSE={raw_target_metrics['rmse']:.2f}, "
+    #     f"MAE={raw_target_metrics['mae']:.2f}"
+    # )
     print(f"  Tiempo de test: {elapsed:.2f}s")
 
     plot_actual_vs_predicted(
-        y_true=y_test,
-        y_pred=clipped_predictions,
+        y_true=y_test_raw, # y_true=y_test,
+        y_pred=raw_predictions, # y_pred=clipped_predictions,
         title=f"RUL real frente a predicho: {dataset_name} (test)",
     )
     plot_test_by_engine(
         engine_ids=test_units,
-        y_true=y_test,
-        y_pred=clipped_predictions,
+        y_true=y_test_raw, # y_true=y_test,
+        y_pred=raw_predictions, # y_pred=clipped_predictions,
         dataset_name=dataset_name,
     )
 
@@ -2310,7 +2310,7 @@ def test_final_model(
         "test_rmse": consistent_metrics["rmse"],
         "test_mae": consistent_metrics["mae"],
         "test_nasa": test_nasa,
-        "test_raw_target_mse": raw_target_metrics["mse"],
+        "test_raw_target_mse": consistent_metrics["mse"], # "test_raw_target_mse": raw_target_metrics["mse"],
     }
 
 
