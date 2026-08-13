@@ -2219,9 +2219,11 @@ def test_final_model(
     selected_features: Sequence[str],
     sensor_scaler: MinMaxScaler,
     derived_scaler: StandardScaler,
-) -> Dict[str, float]:
-    """Evalúa solamente una vez el modelo seleccionado en test."""
-    print(f"\nProcesando test de {dataset_name}...")
+    bootstrap_iterations: int = 500,
+    confidence_level: float = 0.95,
+) -> Dict[str, Any]:
+    """Evalúa el test del modelo con intervalos de confianza por bootstrap."""
+    print(f"\nProcesando test de {dataset_name} con bootstrap...")
     start_time = time.time()
 
     test_path = DATA_DIR / f"test_{dataset_name}.txt"
@@ -2270,47 +2272,89 @@ def test_final_model(
     X_test = derived_scaler.transform(X_test_raw).astype(np.float32)
 
     y_test_raw = raw_rul_lookup.loc[test_units].to_numpy(dtype=np.float32)
-    # y_test = np.clip(y_test_raw, 0.0, float(RUL_MAX))
-
     raw_predictions = model.predict_raw(X_test)
-    # clipped_predictions = np.clip(raw_predictions, 0.0, float(RUL_MAX))
 
-    consistent_metrics = regression_metrics(y_test_raw, raw_predictions) # consistent_metrics = regression_metrics(y_test, clipped_predictions)
-    # raw_target_metrics = regression_metrics(y_test_raw, raw_predictions)
-    test_nasa = nasa_score(y_test_raw, raw_predictions) # test_nasa = nasa_score(y_test, clipped_predictions)
+    metrics = regression_metrics(y_test_raw, raw_predictions)
+    test_nasa = nasa_score(y_test_raw, raw_predictions)
+
+    if len(y_test_raw) == 0:
+        raise ValueError(f"No hay muestras de test para {dataset_name}.")
+
+    bootstrap_rng = np.random.default_rng(RANDOM_STATE)
+    n_samples = len(y_test_raw)
+    bootstrap_mse = np.empty(bootstrap_iterations, dtype=np.float64)
+    bootstrap_rmse = np.empty(bootstrap_iterations, dtype=np.float64)
+    bootstrap_mae = np.empty(bootstrap_iterations, dtype=np.float64)
+    bootstrap_nasa = np.empty(bootstrap_iterations, dtype=np.float64)
+
+    for index in range(bootstrap_iterations):
+        sample_index = bootstrap_rng.integers(
+            0,
+            n_samples,
+            size=n_samples,
+        )
+        y_boot = y_test_raw[sample_index]
+        pred_boot = raw_predictions[sample_index]
+
+        boot_metrics = regression_metrics(y_boot, pred_boot)
+        bootstrap_mse[index] = boot_metrics["mse"]
+        bootstrap_rmse[index] = boot_metrics["rmse"]
+        bootstrap_mae[index] = boot_metrics["mae"]
+        bootstrap_nasa[index] = nasa_score(y_boot, pred_boot)
+
+    alpha = (1.0 - confidence_level) / 2.0
+    percentiles = [100.0 * alpha, 100.0 * (1.0 - alpha)]
+
+    mse_ci = tuple(
+        float(value) for value in np.percentile(bootstrap_mse, percentiles)
+    )
+    rmse_ci = tuple(
+        float(value) for value in np.percentile(bootstrap_rmse, percentiles)
+    )
+    mae_ci = tuple(
+        float(value) for value in np.percentile(bootstrap_mae, percentiles)
+    )
+    nasa_ci = tuple(
+        float(value) for value in np.percentile(bootstrap_nasa, percentiles)
+    )
 
     elapsed = time.time() - start_time
     print(
-        f"  RUL: MSE={consistent_metrics['mse']:.2f}, " # f"  RUL limitado a {RUL_MAX}: MSE={consistent_metrics['mse']:.2f}, "
-        f"RMSE={consistent_metrics['rmse']:.2f}, "
-        f"MAE={consistent_metrics['mae']:.2f}, NASA={test_nasa:.2f}"
+        f"  RUL: MSE={metrics['mse']:.2f}, "
+        f"RMSE={metrics['rmse']:.2f}, "
+        f"MAE={metrics['mae']:.2f}, NASA={test_nasa:.2f}"
     )
-    # print(
-    #     "  Referencia sobre RUL original: "
-    #     f"MSE={raw_target_metrics['mse']:.2f}, "
-    #     f"RMSE={raw_target_metrics['rmse']:.2f}, "
-    #     f"MAE={raw_target_metrics['mae']:.2f}"
-    # )
+    print(
+        f"  IC {confidence_level * 100:.0f}% por bootstrap "
+        f"(B={bootstrap_iterations}): "
+        f"MSE=[{mse_ci[0]:.2f}, {mse_ci[1]:.2f}], RMSE=[{rmse_ci[0]:.2f}, {rmse_ci[1]:.2f}], MAE=[{mae_ci[0]:.2f}, {mae_ci[1]:.2f}], NASA=[{nasa_ci[0]:.2f}, {nasa_ci[1]:.2f}]"
+    )
     print(f"  Tiempo de test: {elapsed:.2f}s")
 
     plot_actual_vs_predicted(
-        y_true=y_test_raw, # y_true=y_test,
-        y_pred=raw_predictions, # y_pred=clipped_predictions,
+        y_true=y_test_raw,
+        y_pred=raw_predictions,
         title=f"RUL real frente a predicho: {dataset_name} (test)",
     )
     plot_test_by_engine(
         engine_ids=test_units,
-        y_true=y_test_raw, # y_true=y_test,
-        y_pred=raw_predictions, # y_pred=clipped_predictions,
+        y_true=y_test_raw,
+        y_pred=raw_predictions,
         dataset_name=dataset_name,
     )
 
     return {
-        "test_mse": consistent_metrics["mse"],
-        "test_rmse": consistent_metrics["rmse"],
-        "test_mae": consistent_metrics["mae"],
+        "test_mse": metrics["mse"],
+        "test_rmse": metrics["rmse"],
+        "test_mae": metrics["mae"],
         "test_nasa": test_nasa,
-        "test_raw_target_mse": consistent_metrics["mse"], # "test_raw_target_mse": raw_target_metrics["mse"],
+        "test_raw_target_mse": metrics["mse"],
+        "test_mse_ci95": mse_ci,
+        "test_rmse_ci95": rmse_ci,
+        "test_mae_ci95": mae_ci,
+        "test_nasa_ci95": nasa_ci,
+        "bootstrap_iterations": int(bootstrap_iterations),
+        "confidence_level": float(confidence_level),
     }
 
 
@@ -2596,6 +2640,10 @@ def process_dataset(dataset_name: str) -> Dict[str, Any]:
         "Test RMSE": test_results.get("test_rmse", np.nan),
         "Test MAE": test_results.get("test_mae", np.nan),
         "Test NASA": test_results.get("test_nasa", np.nan),
+        "Test MSE IC95": test_results.get("test_mse_ci95", (np.nan, np.nan)),
+        "Test RMSE IC95": test_results.get("test_rmse_ci95", (np.nan, np.nan)),
+        "Test MAE IC95": test_results.get("test_mae_ci95", (np.nan, np.nan)),
+        "Test NASA IC95": test_results.get("test_nasa_ci95", (np.nan, np.nan)),
         "Time_sec": round(elapsed, 2),
     }
 
