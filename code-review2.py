@@ -69,12 +69,9 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.utils.prune as prune
 
-
-# =============================================================================
-# 1. CONFIGURACIÓN GENERAL
-# =============================================================================
-
+"""1. CONFIGURACIÓN GENERAL"""
 # Carpeta que contiene train_FD001.txt, test_FD001.txt y RUL_FD001.txt.
 DATA_DIR = Path("data/CMAPSSData")
 
@@ -165,15 +162,16 @@ CACHE_DIR = Path("mopso_cache")
 RESULTS_DIR = Path("mopso_results")
 MODELS_DIR = Path("mopso_models")
 
+# Configuraciones para la poda
+PRUNING_FINE_TUNE_EPOCHS = 1_000
+PRUNING_VALIDATION_INTERVAL = 25
+PRUNING_EARLY_STOPPING_PATIENCE = 10
+PRUNING_MIN_EPOCHS_BEFORE_STOP = 100
+
 sns.set_theme(style="whitegrid")
 plt.rcParams.update({"font.size": 12, "figure.dpi": 180})
 
-
-# =============================================================================
-# 2. REPRODUCIBILIDAD Y UTILIDADES DE ESTADO
-# =============================================================================
-
-
+"""2. REPRODUCIBILIDAD Y UTILIDADES DE ESTADO"""
 def set_global_seed(seed: int) -> None:
     """Configura NumPy y PyTorch para una ejecución reproducible."""
     np.random.seed(seed)
@@ -254,12 +252,7 @@ def move_optimizer_state_to_device(
             if torch.is_tensor(value):
                 state[key] = value.to(device)
 
-
-# =============================================================================
-# 3. LECTURA Y PREPARACIÓN DE C-MAPSS
-# =============================================================================
-
-
+"""3. LECTURA Y PREPARACIÓN DE C-MAPSS"""
 def load_cmapss(path: Path | str) -> pd.DataFrame:
     """Carga un archivo train/test de C-MAPSS."""
     column_names = [f"col_{index}" for index in range(1, 27)]
@@ -452,12 +445,7 @@ def build_statistical_windows(
         np.asarray(window_units, dtype=np.int64),
     )
 
-
-# =============================================================================
-# 4. MLP CONFIGURABLE
-# =============================================================================
-
-
+"""4. MLP CONFIGURABLE"""
 def make_activation(name: str) -> nn.Module:
     """Crea una activación a partir del nombre almacenado en la arquitectura."""
     normalized = name.lower()
@@ -564,22 +552,18 @@ class MLPRegressor:
     def predict_clipped(self, X: np.ndarray) -> np.ndarray:
         return np.clip(self.predict_raw(X), 0.0, float(RUL_MAX))
 
-
-# =============================================================================
-# 5. MÉTRICAS Y COMPLEJIDAD
-# =============================================================================
-
-
+"""5. MÉTRICAS Y COMPLEJIDAD"""
 def regression_metrics(
     y_true: np.ndarray,
     y_pred: np.ndarray,
 ) -> Dict[str, float]:
     mse = float(mean_squared_error(y_true, y_pred))
-    return {
+    summary = {
         "mse": mse,
         "rmse": float(math.sqrt(mse)),
         "mae": float(mean_absolute_error(y_true, y_pred)),
     }
+    return summary
 
 
 def nasa_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
@@ -621,12 +605,96 @@ def count_mlp_parameters(
         )
     )
 
+def get_linear_layers(model: MLPRegressor) -> List[nn.Linear]:
+    """Devuelve las capas que contienen arcos ponderados."""
+    return [
+        module
+        for module in model.model.modules()
+        if isinstance(module, nn.Linear)
+    ]
 
-# =============================================================================
-# 6. ENTRENAMIENTO CON CHECKPOINT DE VALIDACIÓN
-# =============================================================================
+
+def count_mlp_arcs(model: MLPRegressor) -> int:
+    """Número de arcos de la MLP.
+
+    Se cuentan únicamente pesos de capas Linear.
+    Los bias no se consideran arcos.
+    """
+    return int(
+        sum(
+            layer.weight.numel()
+            for layer in get_linear_layers(model)
+        )
+    )
 
 
+def count_active_arcs(model: MLPRegressor) -> int:
+    """Cuenta los arcos activos durante la poda."""
+    active = 0
+
+    for layer in get_linear_layers(model):
+        if hasattr(layer, "weight_mask"):
+            active += int(
+                torch.count_nonzero(layer.weight_mask).item()
+            )
+        else:
+            active += int(layer.weight.numel())
+
+    return active
+
+
+def apply_global_magnitude_pruning(
+    model: MLPRegressor,
+    alpha: float,
+) -> Dict[str, int | float]:
+    """Aplica poda global respetando A_active <= floor(alpha * A0).
+
+    Parameters
+    ----------
+    alpha:
+        Fracción máxima de arcos que se desea conservar.
+        alpha=0.70 implica eliminar al menos el 30 %.
+    """
+    if not 0.0 < alpha <= 1.0:
+        raise ValueError("alpha debe cumplir 0 < alpha <= 1.")
+
+    layers = get_linear_layers(model)
+    parameters_to_prune = [
+        (layer, "weight")
+        for layer in layers
+    ]
+
+    total_arcs = count_mlp_arcs(model)
+    target_active = int(math.floor(alpha * total_arcs))
+    target_pruned = total_arcs - target_active
+
+    if target_pruned > 0:
+        # Se usa un entero, en lugar de una fracción, para imponer
+        # exactamente el presupuesto deseado de arcos.
+        prune.global_unstructured(
+            parameters_to_prune,
+            pruning_method=prune.L1Unstructured,
+            amount=target_pruned,
+        )
+
+    active_arcs = count_active_arcs(model)
+
+    return {
+        "alpha": float(alpha),
+        "total_arcs": int(total_arcs),
+        "active_arcs": int(active_arcs),
+        "pruned_arcs": int(total_arcs - active_arcs),
+        "sparsity": float(1.0 - active_arcs / total_arcs),
+    }
+
+
+def make_pruning_permanent(model: MLPRegressor) -> None:
+    """Incorpora las máscaras a los pesos antes de guardar el modelo."""
+    for layer in get_linear_layers(model):
+        if hasattr(layer, "weight_orig"):
+            prune.remove(layer, "weight")
+
+"""6. ENTRENAMIENTO CON CHECKPOINT DE VALIDACIÓN"""
 @dataclass
 class TrainingState:
     """Estado de continuación y mejor checkpoint observado."""
@@ -782,12 +850,7 @@ def train_additional_epochs(
         final_training_loss=final_loss,
     )
 
-
-# =============================================================================
-# 7. CACHÉ DE ARQUITECTURAS PARA WARM START
-# =============================================================================
-
-
+"""7. CACHÉ DE ARQUITECTURAS PARA WARM START"""
 ArchitectureCache = Dict[Tuple[Any, ...], Dict[str, Any]]
 
 
@@ -1024,12 +1087,7 @@ def evaluate_architecture_with_cache(
         elapsed=time.time() - start_time,
     )
 
-
-# =============================================================================
-# 8. ESPACIO DE BÚSQUEDA DISCRETO
-# =============================================================================
-
-
+"""8. ESPACIO DE BÚSQUEDA DISCRETO"""
 class SearchSpace:
     """Codificación continua del PSO y decodificación a una arquitectura."""
 
@@ -1099,12 +1157,7 @@ class SearchSpace:
             dropout=float(DROPOUT_CHOICES[dropout_index]),
         )
 
-
-# =============================================================================
-# 9. OPERADORES MULTIOBJETIVO: PARETO Y CROWDING DISTANCE
-# =============================================================================
-
-
+"""9. OPERADORES MULTIOBJETIVO: PARETO Y CROWDING DISTANCE"""
 @dataclass
 class Particle:
     position: np.ndarray
@@ -1338,12 +1391,7 @@ def compromise_record(
     distances = np.sqrt(normalized_rmse**2 + normalized_parameters**2)
     return archive[int(np.argmin(distances))]
 
-
-# =============================================================================
-# 10. MOPSO MULTIFIDELIDAD
-# =============================================================================
-
-
+"""10. MOPSO MULTIFIDELIDAD"""
 @dataclass
 class MOPSOResult:
     final_pareto: List[ParetoRecord]
@@ -1728,12 +1776,7 @@ def run_mopso(
         all_evaluations=pd.DataFrame(evaluation_rows),
     )
 
-
-# =============================================================================
-# 11. EVALUACIÓN FINAL CON VARIAS SEMILLAS
-# =============================================================================
-
-
+"""11. EVALUACIÓN FINAL CON VARIAS SEMILLAS"""
 @dataclass
 class FinalSeedResult:
     architecture: Architecture
@@ -2031,12 +2074,7 @@ def evaluate_final_candidates(
         summary_table=summary_table,
     )
 
-
-# =============================================================================
-# 12. GRÁFICAS
-# =============================================================================
-
-
+"""12. GRÁFICAS"""
 def plot_mopso_history(
     history: pd.DataFrame,
     dataset_name: str,
@@ -2046,17 +2084,17 @@ def plot_mopso_history(
         history["stage"],
         history["best_rmse"],
         marker="o",
-        label="Mejor RMSE del frente",
+        label="Best RMSE on the Pareto front",
     )
     plt.plot(
         history["stage"],
         history["compromise_rmse"],
         marker="s",
-        label="RMSE de la solución de compromiso",
+        label="RMSE of the compromise solution",
     )
-    plt.xlabel("Etapa multifidelidad")
-    plt.ylabel("RMSE de validación")
-    plt.title(f"Convergencia MOPSO: {dataset_name}")
+    plt.xlabel("Multi-fidelity stage")
+    plt.ylabel("Validation RMSE")
+    plt.title(f"MOPSO convergence: {dataset_name}")
     plt.legend()
     plt.tight_layout()
     plt.show()
@@ -2077,7 +2115,7 @@ def plot_pareto_summaries(
         [winner.mean_rmse],
         s=180,
         marker="*",
-        label="Solución seleccionada",
+        label="Selected solution",
     )
 
     for summary in summaries:
@@ -2090,9 +2128,9 @@ def plot_pareto_summaries(
             fontsize=8,
         )
 
-    plt.xlabel("Número de parámetros")
-    plt.ylabel("RMSE medio de validación")
-    plt.title(f"Precisión frente a complejidad: {dataset_name}")
+    plt.xlabel("Number of parameters")
+    plt.ylabel("Mean validation RMSE")
+    plt.title(f"Accuracy versus complexity: {dataset_name}")
     plt.legend()
     plt.tight_layout()
     plt.show()
@@ -2113,10 +2151,10 @@ def plot_actual_vs_predicted(
         [lower, upper],
         linestyle="--",
         linewidth=2,
-        label="Predicción perfecta",
+        label="Perfect prediction",
     )
-    plt.xlabel("RUL real")
-    plt.ylabel("RUL predicho")
+    plt.xlabel("Actual RUL")
+    plt.ylabel("Predicted RUL")
     plt.title(title)
     plt.xlim(lower, upper)
     plt.ylim(lower, upper)
@@ -2138,28 +2176,23 @@ def plot_test_by_engine(
         engine_ids[order],
         y_true[order],
         linewidth=1.8,
-        label="RUL real",
+        label="Actual RUL",
     )
     plt.plot(
         engine_ids[order],
         y_pred[order],
         linewidth=1.4,
         linestyle="--",
-        label="RUL predicho",
+        label="Predicted RUL",
     )
-    plt.xlabel("ID del motor")
+    plt.xlabel("Engine ID")
     plt.ylabel("RUL")
-    plt.title(f"Predicción de RUL en test: {dataset_name}")
+    plt.title(f"RUL prediction on test: {dataset_name}")
     plt.legend()
     plt.tight_layout()
     plt.show()
 
-
-# =============================================================================
-# 13. EVALUACIÓN DE VALIDACIÓN Y TEST
-# =============================================================================
-
-
+"""13. EVALUACIÓN DE VALIDACIÓN Y TEST"""
 def build_model_from_final_selection(
     input_size: int,
     final_selection: FinalSelection,
@@ -2201,7 +2234,7 @@ def evaluate_validation_model(
     plot_actual_vs_predicted(
         y_true=y_val,
         y_pred=clipped_predictions,
-        title=f"RUL real frente a predicho: {dataset_name} (validación)",
+        title=f"Actual RUL vs. Predicted RUL: {dataset_name} (validation)",
     )
 
     return {
@@ -2334,7 +2367,7 @@ def test_final_model(
     plot_actual_vs_predicted(
         y_true=y_test_raw,
         y_pred=raw_predictions,
-        title=f"RUL real frente a predicho: {dataset_name} (test)",
+        title=f"Actual RUL vs. Predicted RUL: {dataset_name} (test)",
     )
     plot_test_by_engine(
         engine_ids=test_units,
@@ -2357,12 +2390,7 @@ def test_final_model(
         "confidence_level": float(confidence_level),
     }
 
-
-# =============================================================================
-# 14. GUARDADO DEL MODELO Y RESULTADOS
-# =============================================================================
-
-
+"""14. GUARDADO DEL MODELO Y RESULTADOS"""
 def save_final_artifacts(
     dataset_name: str,
     model: MLPRegressor,
@@ -2417,12 +2445,7 @@ def save_final_artifacts(
     torch.save(package, model_path)
     print(f"Modelo y preprocesadores guardados en: {model_path}")
 
-
-# =============================================================================
-# 15. PROCESAMIENTO COMPLETO DE UN SUBCONJUNTO
-# =============================================================================
-
-
+"""15. PROCESAMIENTO COMPLETO DE UN SUBCONJUNTO"""
 def process_dataset(dataset_name: str) -> Dict[str, Any]:
     dataset_start = time.time()
     print(f"\n{'=' * 80}\nProcesando {dataset_name}\n{'=' * 80}")
@@ -2645,29 +2668,209 @@ def process_dataset(dataset_name: str) -> Dict[str, Any]:
         "Test MAE IC95": test_results.get("test_mae_ci95", (np.nan, np.nan)),
         "Test NASA IC95": test_results.get("test_nasa_ci95", (np.nan, np.nan)),
         "Time_sec": round(elapsed, 2),
+        "_pruning_context": {
+            "model": final_model,
+            "X_train": X_train,
+            "y_train": y_train,
+            "X_val": X_val,
+            "y_val": y_val,
+            "columns_to_drop": columns_to_drop,
+            "selected_features": selected_features,
+            "sensor_scaler": sensor_scaler,
+            "derived_scaler": derived_scaler,
+        },
     }
 
+"""16. FUNCIONES DE PODA"""
+def prune_and_finetune(
+    dense_model: MLPRegressor,
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    X_val: np.ndarray,
+    y_val: np.ndarray,
+    alpha: float,
+) -> Tuple[MLPRegressor, Dict[str, Any]]:
+    """Poda una copia del modelo denso y realiza fine-tuning."""
 
-# =============================================================================
-# 16. EJECUCIÓN
-# =============================================================================
+    # Trabajar sobre una copia independiente de la solución MOPSO.
+    model = MLPRegressor(
+        input_size=dense_model.input_size,
+        architecture=dense_model.architecture,
+        learning_rate=dense_model.learning_rate,
+        weight_decay=dense_model.weight_decay,
+    )
+    model.load_weights(dense_model.get_weights())
+
+    pruning_info = apply_global_magnitude_pruning(
+        model=model,
+        alpha=alpha,
+    )
+
+    # Reconstruir AdamW después de crear weight_orig/weight_mask.
+    model.optimizer = optim.AdamW(
+        model.model.parameters(),
+        lr=model.learning_rate,
+        weight_decay=model.weight_decay,
+    )
+
+    # Evaluar inmediatamente después de podar.
+    initial_predictions = model.predict_clipped(X_val)
+    initial_metrics = regression_metrics(
+        y_val,
+        initial_predictions,
+    )
+    initial_weights = model.get_weights()
+
+    # Fine-tuning manteniendo fija la máscara.
+    state = train_additional_epochs(
+        model=model,
+        X_train=X_train,
+        y_train=y_train,
+        X_val=X_val,
+        y_val=y_val,
+        start_epoch=0,
+        additional_epochs=PRUNING_FINE_TUNE_EPOCHS,
+        validation_interval=PRUNING_VALIDATION_INTERVAL,
+        previous_best_weights=initial_weights,
+        previous_best_epoch=0,
+        previous_best_metrics=initial_metrics,
+        early_stopping_patience=PRUNING_EARLY_STOPPING_PATIENCE,
+        minimum_epochs_before_stop=PRUNING_MIN_EPOCHS_BEFORE_STOP,
+        minimum_delta_rmse=0.0,
+        verbose=False,
+    )
+
+    # Recuperar el mejor checkpoint observado.
+    model.load_weights(state.best_weights)
+
+    final_predictions = model.predict_clipped(X_val)
+    final_metrics = regression_metrics(
+        y_val,
+        final_predictions,
+    )
+
+    pruning_info.update(
+        {
+            "rmse_before_finetune": initial_metrics["rmse"],
+            "rmse_after_finetune": final_metrics["rmse"],
+            "mae_after_finetune": final_metrics["mae"],
+            "nasa_after_finetune": nasa_score(
+                y_val,
+                final_predictions,
+            ),
+            "best_epoch": state.best_epoch,
+        }
+    )
+
+    # Convierte weight_orig * weight_mask nuevamente en un weight normal.
+    # Los elementos podados quedan exactamente en cero.
+    make_pruning_permanent(model)
+
+    return model, pruning_info
 
 
-def main(datasets: Iterable[str] = DATASETS) -> pd.DataFrame:
+def process_pruning(
+    processed: Dict[str, Any],
+    alpha: float = 0.70,
+) -> Dict[str, Any]:
+    """Poda una copia del modelo y reporta solamente el test oficial."""
+    pruning_start = time.time()
+    dataset_name = processed["Dataset"]
+    context = processed.get("_pruning_context")
+    if context is None:
+        raise ValueError(
+            "El resultado no contiene '_pruning_context'. "
+            "Debe provenir de process_dataset()."
+        )
+    print(f"\n{'=' * 80}\nPodando {dataset_name}\n{'=' * 80}")
+
+    pruned_model, pruning_results = prune_and_finetune(
+        dense_model=context["model"],
+        X_train=context["X_train"],
+        y_train=context["y_train"],
+        X_val=context["X_val"],
+        y_val=context["y_val"],
+        alpha=alpha,
+    )
+
+    print("\nResultado de poda:")
+    print(
+        f"  alpha={pruning_results['alpha']:.2f} | "
+        f"arcos originales={pruning_results['total_arcs']} | "
+        f"arcos activos={pruning_results['active_arcs']} | "
+        f"esparsidad={100 * pruning_results['sparsity']:.1f}%"
+    )
+
+    test_results = test_final_model(
+        model=pruned_model,
+        dataset_name=dataset_name,
+        columns_to_drop=context["columns_to_drop"],
+        selected_features=context["selected_features"],
+        sensor_scaler=context["sensor_scaler"],
+        derived_scaler=context["derived_scaler"],
+    )
+
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    torch.save(
+        {
+            "dataset": dataset_name,
+            "variant": "pruned",
+            "architecture": pruned_model.architecture,
+            "weights": pruned_model.get_weights(),
+            "input_size": pruned_model.input_size,
+            "pruning": pruning_results,
+        },
+        MODELS_DIR / f"{dataset_name}_lightweight_mlp_mopso_pruned.pt",
+    )
+
+    return {
+        "Dataset": dataset_name,
+        "Variant": "pruned",
+        "Architecture": processed["Architecture"],
+        "Input variables": processed["Input variables"],
+        "Parameters": processed["Parameters"],
+        "Active arcs": pruning_results["active_arcs"],
+        "Total arcs": pruning_results["total_arcs"],
+        "Sparsity": pruning_results["sparsity"],
+        "Pruning alpha": pruning_results["alpha"],
+        "Test MSE": test_results.get("test_mse", np.nan),
+        "Test RMSE": test_results.get("test_rmse", np.nan),
+        "Test MAE": test_results.get("test_mae", np.nan),
+        "Test NASA": test_results.get("test_nasa", np.nan),
+        "Test MSE IC95": test_results.get("test_mse_ci95", (np.nan, np.nan)),
+        "Test RMSE IC95": test_results.get("test_rmse_ci95", (np.nan, np.nan)),
+        "Test MAE IC95": test_results.get("test_mae_ci95", (np.nan, np.nan)),
+        "Test NASA IC95": test_results.get("test_nasa_ci95", (np.nan, np.nan)),
+        "Time_sec": round(time.time() - pruning_start, 2),
+    }
+
+"""16. RED DENSA"""
+def run_dense_pipeline(
+    datasets: Iterable[str] = DATASETS,
+) -> Dict[str, Dict[str, Any]]:
+    """Ejecuta solamente la selección y evaluación de modelos densos."""
     script_start = time.time()
-    results: List[Dict[str, Any]] = []
+    dense_results: Dict[str, Dict[str, Any]] = {}
+    summaries: List[Dict[str, Any]] = []
 
     for dataset_name in datasets:
-        result = process_dataset(dataset_name)
-        if result:
-            results.append(result)
+        processed = process_dataset(dataset_name)
+        if processed:
+            dense_results[dataset_name] = processed
+            dense_summary = {
+                key: value
+                for key, value in processed.items()
+                if not key.startswith("_")
+            }
+            dense_summary["Variant"] = "dense"
+            summaries.append(dense_summary)
 
-    results_dataframe = pd.DataFrame(results)
+    summary_dataframe = pd.DataFrame(summaries)
     total_elapsed = time.time() - script_start
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    results_dataframe.to_csv(
-        RESULTS_DIR / "mopso_lightweight_summary.csv",
+    summary_dataframe.to_csv(
+        RESULTS_DIR / "mopso_lightweight_dense_summary.csv",
         index=False,
     )
 
@@ -2675,11 +2878,46 @@ def main(datasets: Iterable[str] = DATASETS) -> pd.DataFrame:
         f"\n{'=' * 80}\nEjecución total finalizada en "
         f"{total_elapsed:.2f}s ({total_elapsed / 60:.2f} min)"
     )
-    print("Resumen:")
-    print(results_dataframe)
+    print("Resumen de modelos densos:")
+    print(summary_dataframe)
 
-    return results_dataframe
+    return dense_results
 
 
-if __name__ == "__main__":
-    main()
+dense_results = run_dense_pipeline()
+
+"""17. PODA"""
+def run_pruning_pipeline(
+    dense_results: Dict[str, Dict[str, Any]],
+    alphas: list = [0.95, 0.90, 0.80, 0.70, 0.60, 0.50],
+    datasets: Optional[Iterable[str]] = None,
+) -> pd.DataFrame:
+    """Poda resultados densos ya calculados, sin repetir process_dataset."""
+    selected_datasets = (
+        list(dense_results) if datasets is None else list(datasets)
+    )
+    pruning_summaries: List[Dict[str, Any]] = []
+
+    for dataset_name in selected_datasets:
+        if dataset_name not in dense_results:
+            raise KeyError(
+                f"No hay un resultado denso en memoria para {dataset_name}."
+            )
+        for alpha in alphas:
+            pruning_summaries.append(
+                process_pruning(dense_results[dataset_name], alpha=alpha)
+            )
+
+    pruning_dataframe = pd.DataFrame(pruning_summaries)
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    pruning_dataframe.to_csv(
+        RESULTS_DIR / "mopso_lightweight_pruning_summary.csv",
+        index=False,
+    )
+    print("Resumen de modelos podados:")
+    print(pruning_dataframe)
+    return pruning_dataframe
+
+pruning_results = run_pruning_pipeline(
+    dense_results, alphas=[0.95, 0.90, 0.80, 0.70, 0.60, 0.50], datasets=["FD001"]
+)
