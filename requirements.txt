@@ -2,6 +2,7 @@ numpy
 pandas
 scikit-learn
 matplotlib
+networkx
 seaborn
 torch
 joblib
