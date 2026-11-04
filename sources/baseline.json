@@ -1,0 +1,32 @@
+{
+    "FD001":{
+        "CNN":18.45,
+        "MODBNE":15.04,
+        "Deep LSTM":16.14,
+        "GRU LSTM":19.64,
+        "RNN":14.57,
+        "bi-RNN-autoencoder":14.70,
+        "Attention-LSTM":14.53,
+        "Chain-graph":17.44,
+        "Deep quantile regression":13.58,
+        "PCA-LSTM":19.43,
+        "CNN-BGRU-SA":13.88,
+        "VAE-RNN":15.81,
+        "ABGRU":12.83,
+        "CNN-LSTM-Attention":15.977,
+        "THGNN":13.15,
+        "CAELSTM":14.44
+    },
+    "FD003":{
+        "CNN":19.82,
+        "MODBNE":12.51,
+        "Deep LSTM":16.18,
+        "RNN":14.92,
+        "CNN-BGRU-SA":14.85,
+        "VAE-RNN":14.88,
+        "ABGRU":13.23,
+        "CNN-LSTM-Attention":13.907,
+        "THGNN":12.61,
+        "CAELSTM":13.400
+    }
+}
