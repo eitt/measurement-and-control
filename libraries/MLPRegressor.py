@@ -1,3 +1,8 @@
+import torch
+from libraries.Architecture import Architecture
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+import numpy as np
+
 class MLPRegressor:
     """Envoltorio para entrenamiento, predicción y restauración de estados."""
 
